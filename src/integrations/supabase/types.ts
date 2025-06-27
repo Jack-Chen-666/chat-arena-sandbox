@@ -9,7 +9,95 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      conversations: {
+        Row: {
+          created_at: string
+          customer_message: string
+          id: string
+          service_response: string
+          test_case_id: string | null
+          test_mode: string
+        }
+        Insert: {
+          created_at?: string
+          customer_message: string
+          id?: string
+          service_response: string
+          test_case_id?: string | null
+          test_mode: string
+        }
+        Update: {
+          created_at?: string
+          customer_message?: string
+          id?: string
+          service_response?: string
+          test_case_id?: string | null
+          test_mode?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_test_case_id_fkey"
+            columns: ["test_case_id"]
+            isOneToOne: false
+            referencedRelation: "test_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_documents: {
+        Row: {
+          content: string
+          created_at: string
+          file_type: string
+          filename: string
+          id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          file_type: string
+          filename: string
+          id?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          file_type?: string
+          filename?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      test_cases: {
+        Row: {
+          attack_type: string
+          category: string
+          created_at: string
+          expected_result: string
+          id: string
+          test_prompt: string
+          updated_at: string
+        }
+        Insert: {
+          attack_type: string
+          category: string
+          created_at?: string
+          expected_result: string
+          id?: string
+          test_prompt: string
+          updated_at?: string
+        }
+        Update: {
+          attack_type?: string
+          category?: string
+          created_at?: string
+          expected_result?: string
+          id?: string
+          test_prompt?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
