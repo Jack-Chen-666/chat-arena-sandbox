@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +25,7 @@ interface AIClient {
   maxMessages: number;
   isActive: boolean;
   testCases: TestCase[];
+  useRandomGeneration?: boolean;
 }
 
 interface ClientConfigModalProps {
@@ -75,6 +77,7 @@ const ClientConfigModal: React.FC<ClientConfigModalProps> = ({
       prompt,
       maxMessages,
       useRandomGeneration,
+      testCases: categoryTestCases,
     });
   };
 
