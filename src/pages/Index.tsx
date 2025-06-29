@@ -1,11 +1,15 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Bot, User, Play, Pause, RotateCcw } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Bot, User, Play, Pause, RotateCcw, Settings, Users } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { DEFAULT_SYSTEM_PROMPT } from '@/components/SystemPromptEditor';
+import SystemPromptEditor from '@/components/SystemPromptEditor';
+import { Link } from 'react-router-dom';
 
 interface Message {
   id: string;
@@ -21,6 +25,7 @@ const Index = () => {
   const [conversationCount, setConversationCount] = useState(0);
   const [apiKey] = useState(() => localStorage.getItem('deepseek-api-key') || '');
   const [systemPrompt] = useState(() => localStorage.getItem('system-prompt') || DEFAULT_SYSTEM_PROMPT);
+  const [showSystemPromptEditor, setShowSystemPromptEditor] = useState(false);
   const autoModeRef = useRef<NodeJS.Timeout>();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -217,64 +222,88 @@ const Index = () => {
       <div className="container mx-auto h-screen flex flex-col">
         {/* Header */}
         <div className="bg-white/10 backdrop-blur-md border-b border-white/20 p-4">
-          <h1 className="text-xl font-bold text-white">AI客服对话测试</h1>
-          <p className="text-sm text-gray-300">与AI客服进行对话，测试其安全性</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-white">AI客服对话测试</h1>
+              <p className="text-sm text-gray-300">与AI客服进行对话，测试其安全性</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Link to="/multi-client">
+                <Button className="bg-purple-600 hover:bg-purple-700 text-white">
+                  <Users className="h-4 w-4 mr-2" />
+                  多客户对话
+                </Button>
+              </Link>
+              <Button
+                onClick={() => setShowSystemPromptEditor(true)}
+                variant="outline"
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                设置
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* 对话区域 */}
-        <div className="flex-1 p-4">
+        <div className="flex-1 p-4 min-h-0">
           <Card className="bg-white/10 backdrop-blur-md border-white/20 h-full flex flex-col">
-            <CardContent className="flex-1 p-4">
-              <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-                {messages.length === 0 ? (
-                  <div className="text-center text-gray-400 mt-8">
-                    <User className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                    <p>等待对话开始...</p>
-                  </div>
-                ) : (
-                  messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex ${message.sender === 'service' ? 'justify-start' : 'justify-end'}`}
-                    >
-                      <div className={`flex items-start space-x-2 max-w-[70%] ${message.sender === 'customer' ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                          message.sender === 'service' 
-                            ? 'bg-blue-500' 
-                            : 'bg-orange-500'
-                        }`}>
-                          {message.sender === 'service' ? (
-                            <Bot className="h-4 w-4 text-white" />
-                          ) : (
-                            <User className="h-4 w-4 text-white" />
-                          )}
-                        </div>
-                        
-                        <div className={`rounded-lg p-3 ${
-                          message.sender === 'service'
-                            ? 'bg-blue-600/80 text-white'
-                            : 'bg-white/20 text-white'
-                        }`}>
-                          <p className="text-sm leading-relaxed">{message.content}</p>
-                          <p className="text-xs opacity-70 mt-2">
-                            {formatTime(message.timestamp)}
-                          </p>
+            <CardContent className="flex-1 p-4 flex flex-col min-h-0">
+              {/* 消息滚动区域 */}
+              <ScrollArea className="flex-1 mb-4">
+                <div className="space-y-4 pr-2">
+                  {messages.length === 0 ? (
+                    <div className="text-center text-gray-400 mt-8">
+                      <User className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                      <p>等待对话开始...</p>
+                    </div>
+                  ) : (
+                    messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex ${message.sender === 'service' ? 'justify-start' : 'justify-end'}`}
+                      >
+                        <div className={`flex items-start space-x-2 max-w-[70%] ${message.sender === 'customer' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            message.sender === 'service' 
+                              ? 'bg-blue-500' 
+                              : 'bg-orange-500'
+                          }`}>
+                            {message.sender === 'service' ? (
+                              <Bot className="h-4 w-4 text-white" />
+                            ) : (
+                              <User className="h-4 w-4 text-white" />
+                            )}
+                          </div>
+                          
+                          <div className={`rounded-lg p-3 ${
+                            message.sender === 'service'
+                              ? 'bg-blue-600/80 text-white'
+                              : 'bg-white/20 text-white'
+                          }`}>
+                            <p className="text-sm leading-relaxed">{message.content}</p>
+                            <p className="text-xs opacity-70 mt-2">
+                              {formatTime(message.timestamp)}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
-                )}
-                <div ref={messagesEndRef} />
-              </div>
+                    ))
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+              </ScrollArea>
 
               {/* 输入框和发送按钮 */}
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 flex-shrink-0">
                 <Input
                   type="text"
                   placeholder="输入你的消息..."
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  className="flex-1 bg-white/10 border-white/20 text-white"
+                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                  className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-gray-400"
                 />
                 <Button onClick={handleSendMessage} disabled={!apiKey} className="bg-orange-600 hover:bg-orange-700 text-white">
                   发送
@@ -320,6 +349,14 @@ const Index = () => {
             </div>
           </div>
         </div>
+
+        {/* 系统提示词编辑器 */}
+        {showSystemPromptEditor && (
+          <SystemPromptEditor
+            isOpen={showSystemPromptEditor}
+            onClose={() => setShowSystemPromptEditor(false)}
+          />
+        )}
       </div>
     </div>
   );
