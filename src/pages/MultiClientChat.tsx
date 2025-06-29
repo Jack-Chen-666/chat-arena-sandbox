@@ -25,6 +25,7 @@ interface AIClient {
   maxMessages: number;
   isActive: boolean;
   testCases: TestCase[];
+  useRandomGeneration?: boolean;
 }
 
 const MultiClientChat = () => {
@@ -38,7 +39,23 @@ const MultiClientChat = () => {
 
   useEffect(() => {
     loadTestCases();
+    // 从localStorage加载客户配置
+    const savedClients = localStorage.getItem('ai-clients');
+    if (savedClients) {
+      try {
+        setClients(JSON.parse(savedClients));
+      } catch (error) {
+        console.error('加载客户配置失败:', error);
+      }
+    }
   }, []);
+
+  // 保存客户配置到localStorage
+  useEffect(() => {
+    if (clients.length > 0) {
+      localStorage.setItem('ai-clients', JSON.stringify(clients));
+    }
+  }, [clients]);
 
   const loadTestCases = async () => {
     try {

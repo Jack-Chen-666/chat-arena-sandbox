@@ -286,6 +286,42 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     }
   };
 
+  // 单独的手动连续发送功能
+  const startManualAutoMode = () => {
+    if (messageCount >= client.maxMessages) {
+      toast({
+        title: `${client.name} 达到消息限制`,
+        description: `已达到最大 ${client.maxMessages} 条消息`,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLocalActive(true);
+    onToggleActive();
+    
+    const runManualAutoConversation = () => {
+      if (messageCount >= client.maxMessages) {
+        setIsLocalActive(false);
+        onToggleActive();
+        return;
+      }
+      
+      handleSendMessage();
+      autoModeRef.current = setTimeout(runManualAutoConversation, 6000);
+    };
+    
+    runManualAutoConversation();
+  };
+
+  const stopManualAutoMode = () => {
+    setIsLocalActive(false);
+    onToggleActive();
+    if (autoModeRef.current) {
+      clearTimeout(autoModeRef.current);
+    }
+  };
+
   const clearMessages = () => {
     setMessages([]);
     setMessageCount(0);
@@ -426,10 +462,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
           
           {!isLocalActive ? (
             <Button
-              onClick={() => {
-                onToggleActive();
-                startAutoMode();
-              }}
+              onClick={startManualAutoMode}
               disabled={!apiKey || messageCount >= client.maxMessages}
               size="sm"
               className="bg-green-600 hover:bg-green-700 text-white"
@@ -438,10 +471,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
             </Button>
           ) : (
             <Button
-              onClick={() => {
-                onToggleActive();
-                stopAutoMode();
-              }}
+              onClick={stopManualAutoMode}
               size="sm"
               className="bg-red-600 hover:bg-red-700 text-white"
             >

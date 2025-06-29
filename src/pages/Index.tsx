@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Bot, User, Play, Pause, RotateCcw, Settings, Users, Upload } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
+import { Upload, FileText, Settings, MessageSquare, Users, Key } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { DEFAULT_SYSTEM_PROMPT } from '@/components/SystemPromptEditor';
 import { SystemPromptEditor } from '@/components/SystemPromptEditor';
@@ -19,40 +20,57 @@ interface Message {
   timestamp: Date;
 }
 
+interface Conversation {
+  id: string;
+  customer_message: string;
+  service_response: string;
+  created_at: string;
+}
+
 const Index = () => {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [isAutoMode, setIsAutoMode] = useState(false);
-  const [conversationCount, setConversationCount] = useState(0);
-  const [apiKey] = useState(() => localStorage.getItem('deepseek-api-key') || '');
-  const [systemPrompt, setSystemPrompt] = useState(() => localStorage.getItem('system-prompt') || DEFAULT_SYSTEM_PROMPT);
-  const [showSystemPromptModal, setShowSystemPromptModal] = useState(false);
-  const autoModeRef = useRef<NodeJS.Timeout>();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [currentMessage, setCurrentMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiKey, setApiKey] = useState(localStorage.getItem('deepseek-api-key') || '');
+  const [systemPrompt, setSystemPrompt] = useState(localStorage.getItem('system-prompt') || DEFAULT_SYSTEM_PROMPT);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   const [showDocumentUploader, setShowDocumentUploader] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    loadConversations();
+  }, []);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const loadConversations = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('conversations')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      
+      setConversations(data || []);
+    } catch (error) {
+      console.error('加载对话记录失败:', error);
+    }
   };
 
-  const addMessage = (content: string, sender: 'customer' | 'service') => {
-    const newMessage: Message = {
-      id: Date.now().toString() + Math.random(),
-      content,
-      sender,
-      timestamp: new Date()
-    };
-    setMessages(prev => [...prev, newMessage]);
-    return newMessage;
+  const saveApiKey = () => {
+    localStorage.setItem('deepseek-api-key', apiKey);
+    setShowSettings(false);
+  };
+
+  const handleSystemPromptChange = (newPrompt: string) => {
+    setSystemPrompt(newPrompt);
+    localStorage.setItem('system-prompt', newPrompt);
   };
 
   const callDeepSeekAPI = async (message: string): Promise<string> => {
     if (!apiKey) {
-      throw new Error('API密钥未设置');
+      throw new Error('请先设置API密钥');
     }
 
     try {
@@ -69,13 +87,17 @@ const Index = () => {
               role: 'system',
               content: systemPrompt
             },
+            ...messages.map(msg => ({
+              role: msg.sender === 'customer' ? 'user' : 'assistant',
+              content: msg.content
+            })),
             {
               role: 'user',
               content: message
             }
           ],
           temperature: 0.7,
-          max_tokens: 400
+          max_tokens: 1000
         }),
       });
 
@@ -87,141 +109,61 @@ const Index = () => {
       return data.choices[0]?.message?.content || '抱歉，我暂时无法回复。';
     } catch (error) {
       console.error('DeepSeek API调用错误:', error);
-      return '您好！我是AI客服助手，很高兴为您服务。请问有什么可以帮助您的吗？';
+      throw error;
     }
   };
 
-  const handleSystemPromptChange = (newPrompt: string) => {
-    setSystemPrompt(newPrompt);
-    localStorage.setItem('system-prompt', newPrompt);
-  };
+  const sendMessage = async () => {
+    if (!currentMessage.trim() || isLoading) return;
 
-  const handleSendMessage = async () => {
-    if (!input.trim()) return;
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      content: currentMessage,
+      sender: 'customer',
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setCurrentMessage('');
+    setIsLoading(true);
 
     try {
-      // 用户发送消息
-      addMessage(input, 'customer');
-      const userMessage = input;
-      setInput('');
-
       // 保存对话记录
       await supabase.from('conversations').insert({
-        customer_message: userMessage,
+        customer_message: currentMessage,
         service_response: '',
-        test_mode: 'single_chat'
+        test_mode: 'manual'
       });
 
-      // AI客服回复
-      setTimeout(async () => {
-        try {
-          const serviceReply = await callDeepSeekAPI(userMessage);
-          addMessage(serviceReply, 'service');
+      const response = await callDeepSeekAPI(currentMessage);
+      
+      const serviceMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: response,
+        sender: 'service',
+        timestamp: new Date()
+      };
 
-          // 更新对话记录
-          await supabase
-            .from('conversations')
-            .update({ service_response: serviceReply })
-            .eq('customer_message', userMessage)
-            .order('created_at', { ascending: false })
-            .limit(1);
-        } catch (error) {
-          console.error('AI客服回复失败:', error);
-        }
-      }, 1000);
+      setMessages(prev => [...prev, serviceMessage]);
+
+      // 更新对话记录
+      await supabase
+        .from('conversations')
+        .update({ service_response: response })
+        .eq('customer_message', currentMessage)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      loadConversations();
     } catch (error) {
       console.error('发送消息失败:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleAutoChat = async () => {
-    if (conversationCount >= 10) {
-      toast({
-        title: "对话已达上限",
-        description: "已完成10轮对话，请清空后重新开始",
-        variant: "destructive"
-      });
-      setIsAutoMode(false);
-      return;
-    }
-
-    try {
-      // 用户发送消息
-      const customerMessage = '你好，我想了解一下你们的产品';
-      addMessage(customerMessage, 'customer');
-
-      // 保存对话记录
-      await supabase.from('conversations').insert({
-        customer_message: customerMessage,
-        service_response: '',
-        test_mode: 'single_chat'
-      });
-
-      // AI客服回复
-      setTimeout(async () => {
-        try {
-          const serviceReply = await callDeepSeekAPI(customerMessage);
-          addMessage(serviceReply, 'service');
-
-          // 更新对话记录
-          await supabase
-            .from('conversations')
-            .update({ service_response: serviceReply })
-            .eq('customer_message', customerMessage)
-            .order('created_at', { ascending: false })
-            .limit(1);
-        } catch (error) {
-          console.error('AI客服回复失败:', error);
-        }
-      }, 1000);
-    } catch (error) {
-      console.error('发送消息失败:', error);
-    }
-
-    setConversationCount(prev => prev + 1);
-    
-    // 检查是否达到10轮限制
-    if (conversationCount + 1 >= 10) {
-      setIsAutoMode(false);
-      toast({
-        title: "自动对话已完成",
-        description: "已完成10轮对话，自动停止",
-      });
-    }
-  };
-
-  const startAutoChat = () => {
-    if (!apiKey) {
-      toast({
-        title: "API密钥未设置",
-        description: "请先在设置中配置DeepSeek API密钥",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsAutoMode(true);
-    autoModeRef.current = setInterval(handleAutoChat, 8000);
-  };
-
-  const stopAutoChat = () => {
-    setIsAutoMode(false);
-    if (autoModeRef.current) {
-      clearInterval(autoModeRef.current);
-    }
-  };
-
-  const clearMessages = () => {
+  const clearChat = () => {
     setMessages([]);
-    setConversationCount(0);
-    stopAutoChat();
-  };
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('zh-CN', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
   };
 
   return (
@@ -231,16 +173,11 @@ const Index = () => {
         <div className="bg-white/10 backdrop-blur-md border-b border-white/20 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold text-white">AI客服对话测试</h1>
-              <p className="text-sm text-gray-300">与AI客服进行对话，测试其安全性</p>
+              <h1 className="text-2xl font-bold text-white">AI 客服安全测试平台</h1>
+              <p className="text-sm text-gray-300">测试AI客服的安全性和响应能力</p>
             </div>
-            <div className="flex items-center space-x-2">
-              <Link to="/multi-client">
-                <Button className="bg-purple-600 hover:bg-purple-700 text-white">
-                  <Users className="h-4 w-4 mr-2" />
-                  多客户对话
-                </Button>
-              </Link>
+            
+            <div className="flex space-x-2">
               <Button
                 onClick={() => setShowDocumentUploader(true)}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
@@ -248,8 +185,18 @@ const Index = () => {
                 <Upload className="h-4 w-4 mr-2" />
                 上传文档
               </Button>
+              
               <Button
-                onClick={() => setShowSystemPromptModal(true)}
+                onClick={() => setShowSystemPrompt(true)}
+                variant="outline"
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              >
+                <MessageSquare className="h-4 w-4 mr-2" />
+                系统提示词
+              </Button>
+              
+              <Button
+                onClick={() => setShowSettings(true)}
                 variant="outline"
                 className="bg-white/10 border-white/20 text-white hover:bg-white/20"
               >
@@ -260,17 +207,40 @@ const Index = () => {
           </div>
         </div>
 
-        {/* 对话区域 */}
-        <div className="flex-1 p-4 min-h-0">
-          <Card className="bg-white/10 backdrop-blur-md border-white/20 h-full flex flex-col">
-            <CardContent className="flex-1 p-4 flex flex-col min-h-0">
-              {/* 消息滚动区域 */}
-              <ScrollArea className="flex-1 mb-4">
-                <div className="space-y-4 pr-2">
+        {/* 主要内容区域 */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* 左侧 - 聊天界面 */}
+          <div className="flex-1 flex flex-col p-4">
+            <Card className="flex-1 bg-white/10 backdrop-blur-md border-white/20 flex flex-col">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-white">实时对话测试</CardTitle>
+                  <div className="flex space-x-2">
+                    <Link to="/multi-client">
+                      <Button size="sm" className="bg-purple-600 hover:bg-purple-700">
+                        <Users className="h-4 w-4 mr-2" />
+                        多客户测试
+                      </Button>
+                    </Link>
+                    <Button
+                      onClick={clearChat}
+                      variant="outline"
+                      size="sm"
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                    >
+                      清空对话
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              
+              <CardContent className="flex-1 flex flex-col min-h-0">
+                {/* 消息区域 */}
+                <div className="flex-1 overflow-y-auto mb-4 space-y-4">
                   {messages.length === 0 ? (
                     <div className="text-center text-gray-400 mt-8">
-                      <User className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                      <p>等待对话开始...</p>
+                      <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                      <p>开始与AI客服对话...</p>
                     </div>
                   ) : (
                     messages.map((message) => (
@@ -278,112 +248,142 @@ const Index = () => {
                         key={message.id}
                         className={`flex ${message.sender === 'service' ? 'justify-start' : 'justify-end'}`}
                       >
-                        <div className={`flex items-start space-x-2 max-w-[70%] ${message.sender === 'customer' ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                            message.sender === 'service' 
-                              ? 'bg-blue-500' 
-                              : 'bg-orange-500'
-                          }`}>
-                            {message.sender === 'service' ? (
-                              <Bot className="h-4 w-4 text-white" />
-                            ) : (
-                              <User className="h-4 w-4 text-white" />
-                            )}
-                          </div>
-                          
-                          <div className={`rounded-lg p-3 ${
-                            message.sender === 'service'
-                              ? 'bg-blue-600/80 text-white'
-                              : 'bg-white/20 text-white'
-                          }`}>
-                            <p className="text-sm leading-relaxed">{message.content}</p>
-                            <p className="text-xs opacity-70 mt-2">
-                              {formatTime(message.timestamp)}
-                            </p>
-                          </div>
+                        <div className={`max-w-[70%] rounded-lg p-3 ${
+                          message.sender === 'service'
+                            ? 'bg-white/20 text-white'
+                            : 'bg-blue-600 text-white'
+                        }`}>
+                          <p className="text-sm">{message.content}</p>
+                          <p className="text-xs opacity-70 mt-1">
+                            {message.timestamp.toLocaleTimeString()}
+                          </p>
                         </div>
                       </div>
                     ))
                   )}
-                  <div ref={messagesEndRef} />
+                  {isLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-white/20 text-white rounded-lg p-3">
+                        <p className="text-sm">AI客服正在回复...</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </ScrollArea>
 
-              {/* 输入框和发送按钮 */}
-              <div className="flex items-center space-x-2 flex-shrink-0">
-                <Input
-                  type="text"
-                  placeholder="输入你的消息..."
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-gray-400"
-                />
-                <Button onClick={handleSendMessage} disabled={!apiKey} className="bg-orange-600 hover:bg-orange-700 text-white">
-                  发送
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                {/* 输入区域 */}
+                <div className="flex space-x-2">
+                  <Input
+                    value={currentMessage}
+                    onChange={(e) => setCurrentMessage(e.target.value)}
+                    placeholder="输入您的消息..."
+                    className="flex-1 bg-white/10 border-white/20 text-white placeholder-gray-400"
+                    onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                    disabled={isLoading}
+                  />
+                  <Button
+                    onClick={sendMessage}
+                    disabled={!currentMessage.trim() || isLoading || !apiKey}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    发送
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-        {/* 底部控制栏 */}
-        <div className="bg-white/10 backdrop-blur-md border-t border-white/20 p-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-300">
-              <span>对话轮数: {conversationCount} / 10</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Button
-                onClick={clearMessages}
-                variant="outline"
-                className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-              >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                清空
-              </Button>
-              {!isAutoMode ? (
-                <Button
-                  onClick={startAutoChat}
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                  disabled={!apiKey}
-                >
-                  <Play className="h-4 w-4 mr-2" />
-                  自动对话
-                </Button>
-              ) : (
-                <Button
-                  onClick={stopAutoChat}
-                  className="bg-red-600 hover:bg-red-700 text-white"
-                >
-                  <Pause className="h-4 w-4 mr-2" />
-                  停止
-                </Button>
-              )}
-            </div>
+          {/* 右侧 - 对话历史 */}
+          <div className="w-80 p-4 pl-0">
+            <Card className="h-full bg-white/10 backdrop-blur-md border-white/20">
+              <CardHeader>
+                <CardTitle className="text-white text-sm">对话历史</CardTitle>
+              </CardHeader>
+              <CardContent className="flex-1 overflow-y-auto">
+                <div className="space-y-3">
+                  {conversations.map((conv) => (
+                    <div key={conv.id} className="bg-white/10 rounded-lg p-3">
+                      <div className="text-xs text-blue-300 mb-1">客户:</div>
+                      <div className="text-xs text-white mb-2 line-clamp-2">
+                        {conv.customer_message}
+                      </div>
+                      <div className="text-xs text-green-300 mb-1">客服:</div>
+                      <div className="text-xs text-gray-300 line-clamp-2">
+                        {conv.service_response}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-2">
+                        {new Date(conv.created_at).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
 
-        {/* 文档上传器模态框 */}
-        <Dialog open={showDocumentUploader} onOpenChange={setShowDocumentUploader}>
-          <DialogContent className="max-w-4xl max-h-[80vh] bg-slate-900 border-slate-700">
+        {/* API密钥设置模态框 */}
+        <Dialog open={showSettings} onOpenChange={setShowSettings}>
+          <DialogContent className="bg-slate-900 border-slate-700">
             <DialogHeader>
-              <DialogTitle className="text-white">文档上传</DialogTitle>
+              <DialogTitle className="text-white flex items-center">
+                <Key className="h-4 w-4 mr-2" />
+                API 设置
+              </DialogTitle>
             </DialogHeader>
-            <DocumentUploader />
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="apiKey" className="text-white">DeepSeek API 密钥</Label>
+                <Input
+                  id="apiKey"
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="请输入您的 DeepSeek API 密钥"
+                  className="bg-slate-800 border-slate-600 text-white"
+                />
+                <p className="text-xs text-gray-400 mt-2">
+                  您可以在 <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">DeepSeek 平台</a> 获取 API 密钥
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={saveApiKey} className="bg-blue-600 hover:bg-blue-700">
+                  保存设置
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
 
-        {/* 系统提示词编辑器模态框 */}
-        <Dialog open={showSystemPromptModal} onOpenChange={setShowSystemPromptModal}>
+        {/* 系统提示词模态框 */}
+        <Dialog open={showSystemPrompt} onOpenChange={setShowSystemPrompt}>
           <DialogContent className="max-w-4xl max-h-[80vh] bg-slate-900 border-slate-700">
             <DialogHeader>
-              <DialogTitle className="text-white">系统设置</DialogTitle>
+              <DialogTitle className="text-white">系统提示词设置</DialogTitle>
             </DialogHeader>
             <SystemPromptEditor
               systemPrompt={systemPrompt}
               onSystemPromptChange={handleSystemPromptChange}
             />
+            <div className="flex justify-end">
+              <Button onClick={() => setShowSystemPrompt(false)} className="bg-blue-600 hover:bg-blue-700">
+                完成
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* 文档上传模态框 */}
+        <Dialog open={showDocumentUploader} onOpenChange={setShowDocumentUploader}>
+          <DialogContent className="max-w-4xl max-h-[80vh] bg-slate-900 border-slate-700">
+            <DialogHeader>
+              <DialogTitle className="text-white">导入测试用例</DialogTitle>
+            </DialogHeader>
+            <DocumentUploader />
+            <div className="flex justify-end">
+              <Button onClick={() => setShowDocumentUploader(false)} className="bg-blue-600 hover:bg-blue-700">
+                关闭
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
       </div>
