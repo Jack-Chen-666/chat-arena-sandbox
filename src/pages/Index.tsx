@@ -9,6 +9,7 @@ import ExcelUploader from '@/components/ExcelUploader';
 import TestModeSelector from '@/components/TestModeSelector';
 import DocumentUploader from '@/components/DocumentUploader';
 import { SystemPromptEditor, DEFAULT_SYSTEM_PROMPT } from '@/components/SystemPromptEditor';
+import { Link } from 'react-router-dom';
 
 interface Message {
   id: string;
@@ -319,6 +320,13 @@ const Index = () => {
             </div>
             
             <div className="flex items-center space-x-2">
+              <Link to="/multi-client">
+                <Button className="bg-purple-600 hover:bg-purple-700 text-white">
+                  <User className="h-4 w-4 mr-2" />
+                  多客户对话
+                </Button>
+              </Link>
+              
               <Button
                 onClick={() => setShowUploader(!showUploader)}
                 variant="outline"
@@ -371,7 +379,6 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Settings and Upload Panel */}
         {(showSettings || showUploader) && (
           <div className="p-4 space-y-4">
             {showSettings && (
