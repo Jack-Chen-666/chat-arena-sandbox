@@ -4,11 +4,12 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Bot, User, Play, Pause, RotateCcw, Settings, Users } from 'lucide-react';
+import { Bot, User, Play, Pause, RotateCcw, Settings, Users, Upload } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { DEFAULT_SYSTEM_PROMPT } from '@/components/SystemPromptEditor';
 import { SystemPromptEditor } from '@/components/SystemPromptEditor';
+import { DocumentUploader } from '@/components/DocumentUploader';
 import { Link } from 'react-router-dom';
 
 interface Message {
@@ -28,6 +29,7 @@ const Index = () => {
   const [showSystemPromptModal, setShowSystemPromptModal] = useState(false);
   const autoModeRef = useRef<NodeJS.Timeout>();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [showDocumentUploader, setShowDocumentUploader] = useState(false);
 
   useEffect(() => {
     scrollToBottom();
@@ -240,6 +242,13 @@ const Index = () => {
                 </Button>
               </Link>
               <Button
+                onClick={() => setShowDocumentUploader(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                上传文档
+              </Button>
+              <Button
                 onClick={() => setShowSystemPromptModal(true)}
                 variant="outline"
                 className="bg-white/10 border-white/20 text-white hover:bg-white/20"
@@ -354,6 +363,16 @@ const Index = () => {
             </div>
           </div>
         </div>
+
+        {/* 文档上传器模态框 */}
+        <Dialog open={showDocumentUploader} onOpenChange={setShowDocumentUploader}>
+          <DialogContent className="max-w-4xl max-h-[80vh] bg-slate-900 border-slate-700">
+            <DialogHeader>
+              <DialogTitle className="text-white">文档上传</DialogTitle>
+            </DialogHeader>
+            <DocumentUploader />
+          </DialogContent>
+        </Dialog>
 
         {/* 系统提示词编辑器模态框 */}
         <Dialog open={showSystemPromptModal} onOpenChange={setShowSystemPromptModal}>

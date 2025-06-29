@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,6 +46,9 @@ const SingleClientChat = () => {
   const [apiKey] = useState(() => localStorage.getItem('deepseek-api-key') || '');
   const [systemPrompt] = useState(() => localStorage.getItem('system-prompt') || '');
 
+  const autoModeRef = useRef<NodeJS.Timeout>();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (location.state) {
       const { client: stateClient, messages: stateMessages, messageCount: stateMessageCount } = location.state;
@@ -55,6 +57,30 @@ const SingleClientChat = () => {
       setMessageCount(stateMessageCount || 0);
     }
   }, [location.state]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    if (isActive && messageCount < (client?.maxMessages || 0)) {
+      const timer = setTimeout(() => {
+        handleSendMessage();
+      }, 3000);
+      
+      return () => clearTimeout(timer);
+    } else if (isActive && messageCount >= (client?.maxMessages || 0)) {
+      setIsActive(false);
+      toast({
+        title: "对话已完成",
+        description: `已达到最大 ${client?.maxMessages} 条消息，自动停止`,
+      });
+    }
+  }, [isActive, messageCount, client]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   const callDeepSeekAPI = async (message: string): Promise<string> => {
     if (!apiKey) {
@@ -142,6 +168,13 @@ const SingleClientChat = () => {
       };
       setMessages(prev => [...prev, newMessage]);
       
+      // 保存对话记录
+      await supabase.from('conversations').insert({
+        customer_message: customerMessage,
+        service_response: '',
+        test_mode: 'single_client'
+      });
+      
       setTimeout(async () => {
         try {
           const serviceReply = await callDeepSeekAPI(customerMessage);
@@ -154,17 +187,18 @@ const SingleClientChat = () => {
           setMessages(prev => [...prev, replyMessage]);
           setMessageCount(prev => prev + 1);
           
-          if (messageCount + 1 >= client.maxMessages) {
-            setIsActive(false);
-            toast({
-              title: "对话已完成",
-              description: `已达到最大 ${client.maxMessages} 条消息，自动停止`,
-            });
-          }
+          // 更新对话记录
+          await supabase
+            .from('conversations')
+            .update({ service_response: serviceReply })
+            .eq('customer_message', customerMessage)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          
         } catch (error) {
           console.error('AI客服回复失败:', error);
         }
-      }, 1000);
+      }, 1500);
     } catch (error) {
       console.error('发送消息失败:', error);
     }
@@ -297,6 +331,7 @@ const SingleClientChat = () => {
                       </div>
                     ))
                   )}
+                  <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
             </CardContent>
