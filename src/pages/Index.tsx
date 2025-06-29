@@ -8,7 +8,7 @@ import { Bot, User, Play, Pause, RotateCcw, Settings, Users } from 'lucide-react
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { DEFAULT_SYSTEM_PROMPT } from '@/components/SystemPromptEditor';
-import SystemPromptEditor from '@/components/SystemPromptEditor';
+import { SystemPromptEditor } from '@/components/SystemPromptEditor';
 import { Link } from 'react-router-dom';
 
 interface Message {
