@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Bot, User, Play, Pause, RotateCcw, Settings, Users } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -24,8 +24,8 @@ const Index = () => {
   const [isAutoMode, setIsAutoMode] = useState(false);
   const [conversationCount, setConversationCount] = useState(0);
   const [apiKey] = useState(() => localStorage.getItem('deepseek-api-key') || '');
-  const [systemPrompt] = useState(() => localStorage.getItem('system-prompt') || DEFAULT_SYSTEM_PROMPT);
-  const [showSystemPromptEditor, setShowSystemPromptEditor] = useState(false);
+  const [systemPrompt, setSystemPrompt] = useState(() => localStorage.getItem('system-prompt') || DEFAULT_SYSTEM_PROMPT);
+  const [showSystemPromptModal, setShowSystemPromptModal] = useState(false);
   const autoModeRef = useRef<NodeJS.Timeout>();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -87,6 +87,11 @@ const Index = () => {
       console.error('DeepSeek API调用错误:', error);
       return '您好！我是AI客服助手，很高兴为您服务。请问有什么可以帮助您的吗？';
     }
+  };
+
+  const handleSystemPromptChange = (newPrompt: string) => {
+    setSystemPrompt(newPrompt);
+    localStorage.setItem('system-prompt', newPrompt);
   };
 
   const handleSendMessage = async () => {
@@ -235,7 +240,7 @@ const Index = () => {
                 </Button>
               </Link>
               <Button
-                onClick={() => setShowSystemPromptEditor(true)}
+                onClick={() => setShowSystemPromptModal(true)}
                 variant="outline"
                 className="bg-white/10 border-white/20 text-white hover:bg-white/20"
               >
@@ -350,13 +355,18 @@ const Index = () => {
           </div>
         </div>
 
-        {/* 系统提示词编辑器 */}
-        {showSystemPromptEditor && (
-          <SystemPromptEditor
-            isOpen={showSystemPromptEditor}
-            onClose={() => setShowSystemPromptEditor(false)}
-          />
-        )}
+        {/* 系统提示词编辑器模态框 */}
+        <Dialog open={showSystemPromptModal} onOpenChange={setShowSystemPromptModal}>
+          <DialogContent className="max-w-4xl max-h-[80vh] bg-slate-900 border-slate-700">
+            <DialogHeader>
+              <DialogTitle className="text-white">系统设置</DialogTitle>
+            </DialogHeader>
+            <SystemPromptEditor
+              systemPrompt={systemPrompt}
+              onSystemPromptChange={handleSystemPromptChange}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
