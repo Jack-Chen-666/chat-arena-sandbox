@@ -138,6 +138,22 @@ const MultiClientChat = () => {
       return;
     }
 
+    // 检查是否有客户还未达到消息上限
+    const availableClients = clients.filter(c => {
+      // 这里需要从ClientChatRoom组件获取当前消息数量
+      // 暂时允许所有客户启动，由ClientChatRoom内部控制
+      return true;
+    });
+
+    if (availableClients.length === 0) {
+      toast({
+        title: "所有客户已完成",
+        description: "所有AI客户都已达到消息上限",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsGlobalAutoMode(true);
     // 激活所有客户
     setClients(prev => prev.map(c => ({ ...c, isActive: true })));
