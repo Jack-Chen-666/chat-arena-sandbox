@@ -144,29 +144,27 @@ const MultiClientChat = () => {
     setClients(prev => prev.map(c => 
       c.id === clientId ? { ...c, isActive: !c.isActive } : c
     ));
+    
+    // 检查是否所有客户都已停止，如果是则停止全局自动模式
+    if (isGlobalAutoMode) {
+      const updatedClients = clients.map(c => 
+        c.id === clientId ? { ...c, isActive: !c.isActive } : c
+      );
+      
+      const activeClients = updatedClients.filter(c => c.isActive);
+      if (activeClients.length === 0) {
+        setIsGlobalAutoMode(false);
+        toast({
+          title: "全局自动模式已停止",
+          description: "所有AI客户都已停止",
+        });
+      }
+    }
   };
 
   const updateClientMessageCount = (clientId: string, count: number) => {
     setClientMessageCounts(prev => {
       const newCounts = {...prev, [clientId]: count};
-      
-      // 检查是否所有客户都达到了消息上限
-      if (isGlobalAutoMode) {
-        const allClientsFinished = clients.every(client => {
-          const clientCount = newCounts[client.id] || 0;
-          return clientCount >= client.maxMessages;
-        });
-        
-        if (allClientsFinished) {
-          setIsGlobalAutoMode(false);
-          setClients(prev => prev.map(c => ({ ...c, isActive: false })));
-          toast({
-            title: "全局自动模式已完成",
-            description: "所有AI客户都已达到消息上限",
-          });
-        }
-      }
-      
       return newCounts;
     });
   };
