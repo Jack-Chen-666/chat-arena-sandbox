@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,6 +39,7 @@ interface ClientChatRoomProps {
   onEdit: () => void;
   onDelete: () => void;
   onToggleActive: () => void;
+  onMessageCountChange: (clientId: string, count: number) => void;
   apiKey: string;
   isGlobalAutoMode: boolean;
 }
@@ -49,13 +49,14 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
   onEdit,
   onDelete,
   onToggleActive,
+  onMessageCountChange,
   apiKey,
   isGlobalAutoMode
 }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageCount, setMessageCount] = useState(0);
   const [isLocalActive, setIsLocalActive] = useState(false);
-  const [isSending, setIsSending] = useState(false); // 添加发送状态控制
+  const [isSending, setIsSending] = useState(false);
   const [usedTestCases, setUsedTestCases] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const autoModeRef = useRef<NodeJS.Timeout>();
@@ -75,10 +76,27 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
   useEffect(() => {
     if (isGlobalAutoMode && client.isActive) {
       startAutoMode();
-    } else {
+    } else if (!isGlobalAutoMode) {
       stopAutoMode();
     }
   }, [isGlobalAutoMode, client.isActive]);
+
+  // 监听全局清空消息事件
+  useEffect(() => {
+    const handleClearAll = () => {
+      clearMessages();
+    };
+
+    window.addEventListener('clearAllClientMessages', handleClearAll);
+    return () => {
+      window.removeEventListener('clearAllClientMessages', handleClearAll);
+    };
+  }, []);
+
+  // 当消息数量改变时通知父组件
+  useEffect(() => {
+    onMessageCountChange(client.id, messageCount);
+  }, [messageCount, client.id, onMessageCountChange]);
 
   const addMessage = (content: string, sender: 'customer' | 'service') => {
     const newMessage: Message = {
@@ -247,10 +265,11 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
             .order('created_at', { ascending: false })
             .limit(1);
             
-          setMessageCount(prev => prev + 1);
+          const newCount = messageCount + 1;
+          setMessageCount(newCount);
           
           // 检查是否达到限制
-          if (messageCount + 1 >= client.maxMessages) {
+          if (newCount >= client.maxMessages) {
             stopAutoMode();
             toast({
               title: `${client.name} 已完成`,
@@ -286,7 +305,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
       
       handleSendMessage().then(() => {
         // 只有在未达到限制且未正在发送时才继续
-        if (messageCount + 1 < client.maxMessages && !isSending) {
+        if (messageCount + 1 < client.maxMessages && !isSending && (isGlobalAutoMode ? client.isActive : isLocalActive)) {
           autoModeRef.current = setTimeout(runAutoConversation, 8000);
         } else {
           stopAutoMode();
@@ -327,7 +346,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
       
       handleSendMessage().then(() => {
         // 只有在未达到限制时才继续
-        if (messageCount + 1 < client.maxMessages && !isSending) {
+        if (messageCount + 1 < client.maxMessages && !isSending && isLocalActive) {
           autoModeRef.current = setTimeout(runManualAutoConversation, 6000);
         } else {
           setIsLocalActive(false);

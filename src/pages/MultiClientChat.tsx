@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -148,7 +147,28 @@ const MultiClientChat = () => {
   };
 
   const updateClientMessageCount = (clientId: string, count: number) => {
-    setClientMessageCounts(prev => ({...prev, [clientId]: count}));
+    setClientMessageCounts(prev => {
+      const newCounts = {...prev, [clientId]: count};
+      
+      // 检查是否所有客户都达到了消息上限
+      if (isGlobalAutoMode) {
+        const allClientsFinished = clients.every(client => {
+          const clientCount = newCounts[client.id] || 0;
+          return clientCount >= client.maxMessages;
+        });
+        
+        if (allClientsFinished) {
+          setIsGlobalAutoMode(false);
+          setClients(prev => prev.map(c => ({ ...c, isActive: false })));
+          toast({
+            title: "全局自动模式已完成",
+            description: "所有AI客户都已达到消息上限",
+          });
+        }
+      }
+      
+      return newCounts;
+    });
   };
 
   const startGlobalAutoMode = () => {
@@ -209,6 +229,11 @@ const MultiClientChat = () => {
   };
 
   const clearAllMessages = () => {
+    // 通知所有客户清空消息
+    const clearEvent = new CustomEvent('clearAllClientMessages');
+    window.dispatchEvent(clearEvent);
+    
+    // 重置消息计数
     setClientMessageCounts(prev => {
       const newCounts = {...prev};
       Object.keys(newCounts).forEach(key => {
@@ -216,6 +241,11 @@ const MultiClientChat = () => {
       });
       return newCounts;
     });
+    
+    // 如果在全局自动模式，也停止它
+    if (isGlobalAutoMode) {
+      stopGlobalAutoMode();
+    }
     
     toast({
       title: "消息已清空",
@@ -321,19 +351,22 @@ const MultiClientChat = () => {
               </Card>
             </div>
           ) : (
-            <div className="h-full overflow-y-auto p-4">
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                {clients.map(client => (
-                  <ClientChatRoom
-                    key={client.id}
-                    client={client}
-                    onEdit={() => editClient(client)}
-                    onDelete={() => deleteClient(client.id)}
-                    onToggleActive={() => toggleClientActive(client.id)}
-                    apiKey={apiKey}
-                    isGlobalAutoMode={isGlobalAutoMode}
-                  />
-                ))}
+            <div className="h-full p-4">
+              <div className="h-full overflow-y-auto">
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {clients.map(client => (
+                    <ClientChatRoom
+                      key={client.id}
+                      client={client}
+                      onEdit={() => editClient(client)}
+                      onDelete={() => deleteClient(client.id)}
+                      onToggleActive={() => toggleClientActive(client.id)}
+                      onMessageCountChange={updateClientMessageCount}
+                      apiKey={apiKey}
+                      isGlobalAutoMode={isGlobalAutoMode}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           )}
