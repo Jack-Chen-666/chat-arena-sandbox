@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
 import ClientChatRoom from '@/components/ClientChatRoom';
 import ClientConfigModal from '@/components/ClientConfigModal';
+import ExcelUploader from '@/components/ExcelUploader';
 
 interface TestCase {
   id: string;
@@ -33,24 +34,32 @@ const MultiClientChat = () => {
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [showExcelUploader, setShowExcelUploader] = useState(false);
   const [editingClient, setEditingClient] = useState<AIClient | null>(null);
   const [isGlobalAutoMode, setIsGlobalAutoMode] = useState(false);
+  const [clientMessageCounts, setClientMessageCounts] = useState<{[key: string]: number}>({});
   const [apiKey] = useState(() => localStorage.getItem('deepseek-api-key') || '');
 
   useEffect(() => {
     loadTestCases();
-    // 从localStorage加载客户配置
     const savedClients = localStorage.getItem('ai-clients');
     if (savedClients) {
       try {
-        setClients(JSON.parse(savedClients));
+        const parsedClients = JSON.parse(savedClients);
+        setClients(parsedClients);
+        
+        // 初始化消息计数
+        const counts: {[key: string]: number} = {};
+        parsedClients.forEach((client: AIClient) => {
+          counts[client.id] = 0;
+        });
+        setClientMessageCounts(counts);
       } catch (error) {
         console.error('加载客户配置失败:', error);
       }
     }
   }, []);
 
-  // 保存客户配置到localStorage
   useEffect(() => {
     if (clients.length > 0) {
       localStorage.setItem('ai-clients', JSON.stringify(clients));
@@ -67,8 +76,6 @@ const MultiClientChat = () => {
       if (error) throw error;
       
       setTestCases(data || []);
-      
-      // 提取所有类别
       const uniqueCategories = [...new Set(data?.map(tc => tc.category) || [])];
       setCategories(uniqueCategories);
       
@@ -93,7 +100,6 @@ const MultiClientChat = () => {
     const categoryTestCases = testCases.filter(tc => tc.category === clientData.category);
     
     if (editingClient) {
-      // 编辑现有客户
       setClients(prev => prev.map(c => 
         c.id === editingClient.id 
           ? { ...clientData, id: editingClient.id, isActive: c.isActive, testCases: categoryTestCases }
@@ -104,7 +110,6 @@ const MultiClientChat = () => {
         description: `${clientData.name} 的配置已成功更新`,
       });
     } else {
-      // 创建新客户
       const newClient: AIClient = {
         ...clientData,
         id: Date.now().toString(),
@@ -112,6 +117,7 @@ const MultiClientChat = () => {
         testCases: categoryTestCases
       };
       setClients(prev => [...prev, newClient]);
+      setClientMessageCounts(prev => ({...prev, [newClient.id]: 0}));
       toast({
         title: "新客户已创建",
         description: `${clientData.name} 已成功创建`,
@@ -124,6 +130,11 @@ const MultiClientChat = () => {
 
   const deleteClient = (clientId: string) => {
     setClients(prev => prev.filter(c => c.id !== clientId));
+    setClientMessageCounts(prev => {
+      const newCounts = {...prev};
+      delete newCounts[clientId];
+      return newCounts;
+    });
     toast({
       title: "客户已删除",
       description: "AI客户已成功删除",
@@ -134,6 +145,10 @@ const MultiClientChat = () => {
     setClients(prev => prev.map(c => 
       c.id === clientId ? { ...c, isActive: !c.isActive } : c
     ));
+  };
+
+  const updateClientMessageCount = (clientId: string, count: number) => {
+    setClientMessageCounts(prev => ({...prev, [clientId]: count}));
   };
 
   const startGlobalAutoMode = () => {
@@ -157,9 +172,8 @@ const MultiClientChat = () => {
 
     // 检查是否有客户还未达到消息上限
     const availableClients = clients.filter(c => {
-      // 这里需要从ClientChatRoom组件获取当前消息数量
-      // 暂时允许所有客户启动，由ClientChatRoom内部控制
-      return true;
+      const messageCount = clientMessageCounts[c.id] || 0;
+      return messageCount < c.maxMessages;
     });
 
     if (availableClients.length === 0) {
@@ -172,18 +186,20 @@ const MultiClientChat = () => {
     }
 
     setIsGlobalAutoMode(true);
-    // 激活所有客户
-    setClients(prev => prev.map(c => ({ ...c, isActive: true })));
+    // 只激活还未达到限制的客户
+    setClients(prev => prev.map(c => {
+      const messageCount = clientMessageCounts[c.id] || 0;
+      return { ...c, isActive: messageCount < c.maxMessages };
+    }));
     
     toast({
       title: "全局自动模式已启动",
-      description: "所有AI客户开始自动对话",
+      description: `${availableClients.length} 个AI客户开始自动对话`,
     });
   };
 
   const stopGlobalAutoMode = () => {
     setIsGlobalAutoMode(false);
-    // 停止所有客户
     setClients(prev => prev.map(c => ({ ...c, isActive: false })));
     
     toast({
@@ -193,7 +209,14 @@ const MultiClientChat = () => {
   };
 
   const clearAllMessages = () => {
-    // 这个功能需要每个ClientChatRoom组件实现
+    setClientMessageCounts(prev => {
+      const newCounts = {...prev};
+      Object.keys(newCounts).forEach(key => {
+        newCounts[key] = 0;
+      });
+      return newCounts;
+    });
+    
     toast({
       title: "消息已清空",
       description: "所有对话记录已清空",
@@ -220,6 +243,15 @@ const MultiClientChat = () => {
             </div>
             
             <div className="flex items-center space-x-2">
+              <Button
+                onClick={() => setShowExcelUploader(true)}
+                variant="outline"
+                size="sm"
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              >
+                上传测试用例
+              </Button>
+              
               <Button
                 onClick={createNewClient}
                 className="bg-green-600 hover:bg-green-700 text-white"
@@ -320,6 +352,37 @@ const MultiClientChat = () => {
             testCases={testCases}
             editingClient={editingClient}
           />
+        )}
+
+        {/* Excel上传模态框 */}
+        {showExcelUploader && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-slate-900 p-6 rounded-lg max-w-2xl w-full mx-4">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-white">上传测试用例</h2>
+                <Button
+                  onClick={() => setShowExcelUploader(false)}
+                  variant="ghost"
+                  size="sm"
+                  className="text-white hover:bg-white/20"
+                >
+                  ×
+                </Button>
+              </div>
+              <ExcelUploader />
+              <div className="mt-4 flex justify-end">
+                <Button
+                  onClick={() => {
+                    setShowExcelUploader(false);
+                    loadTestCases(); // 重新加载测试用例
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  完成
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

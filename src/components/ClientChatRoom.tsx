@@ -55,6 +55,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageCount, setMessageCount] = useState(0);
   const [isLocalActive, setIsLocalActive] = useState(false);
+  const [isSending, setIsSending] = useState(false); // 添加发送状态控制
   const [usedTestCases, setUsedTestCases] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const autoModeRef = useRef<NodeJS.Timeout>();
@@ -183,15 +184,12 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     }
     
     if (client.useRandomGeneration) {
-      // 随机生成模式
       const randomTestCase = client.testCases[Math.floor(Math.random() * client.testCases.length)];
       return await generateRandomTestCase(randomTestCase);
     } else {
-      // 轮训模式
       const availableTestCases = client.testCases.filter(tc => !usedTestCases.has(tc.id));
       
       if (availableTestCases.length === 0) {
-        // 重置已使用的测试用例
         setUsedTestCases(new Set());
         const testCase = client.testCases[0];
         setUsedTestCases(prev => new Set([...prev, testCase.id]));
@@ -205,6 +203,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
   };
 
   const handleSendMessage = async () => {
+    // 检查是否已达到消息限制
     if (messageCount >= client.maxMessages) {
       toast({
         title: `${client.name} 达到消息限制`,
@@ -214,6 +213,13 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
       stopAutoMode();
       return;
     }
+
+    // 防止重复发送
+    if (isSending) {
+      return;
+    }
+
+    setIsSending(true);
 
     try {
       // AI客户发送消息
@@ -227,7 +233,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
         test_mode: 'multi_client'
       });
       
-      // AI客服回复
+      // 等待一秒后AI客服回复
       setTimeout(async () => {
         try {
           const serviceReply = await callDeepSeekAPI(customerMessage);
@@ -243,6 +249,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
             
           setMessageCount(prev => prev + 1);
           
+          // 检查是否达到限制
           if (messageCount + 1 >= client.maxMessages) {
             stopAutoMode();
             toast({
@@ -252,10 +259,14 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
           }
         } catch (error) {
           console.error('AI客服回复失败:', error);
+        } finally {
+          setIsSending(false);
         }
       }, 1000);
+      
     } catch (error) {
       console.error('发送消息失败:', error);
+      setIsSending(false);
     }
   };
 
@@ -267,13 +278,20 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     setIsLocalActive(true);
     
     const runAutoConversation = () => {
-      if (messageCount >= client.maxMessages) {
+      // 检查是否达到消息限制或正在发送
+      if (messageCount >= client.maxMessages || isSending) {
         stopAutoMode();
         return;
       }
       
-      handleSendMessage();
-      autoModeRef.current = setTimeout(runAutoConversation, 8000);
+      handleSendMessage().then(() => {
+        // 只有在未达到限制且未正在发送时才继续
+        if (messageCount + 1 < client.maxMessages && !isSending) {
+          autoModeRef.current = setTimeout(runAutoConversation, 8000);
+        } else {
+          stopAutoMode();
+        }
+      });
     };
     
     runAutoConversation();
@@ -286,7 +304,6 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     }
   };
 
-  // 单独的手动连续发送功能
   const startManualAutoMode = () => {
     if (messageCount >= client.maxMessages) {
       toast({
@@ -301,14 +318,22 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     onToggleActive();
     
     const runManualAutoConversation = () => {
-      if (messageCount >= client.maxMessages) {
+      // 检查是否达到消息限制或正在发送
+      if (messageCount >= client.maxMessages || isSending) {
         setIsLocalActive(false);
         onToggleActive();
         return;
       }
       
-      handleSendMessage();
-      autoModeRef.current = setTimeout(runManualAutoConversation, 6000);
+      handleSendMessage().then(() => {
+        // 只有在未达到限制时才继续
+        if (messageCount + 1 < client.maxMessages && !isSending) {
+          autoModeRef.current = setTimeout(runManualAutoConversation, 6000);
+        } else {
+          setIsLocalActive(false);
+          onToggleActive();
+        }
+      });
     };
     
     runManualAutoConversation();
@@ -326,6 +351,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     setMessages([]);
     setMessageCount(0);
     setUsedTestCases(new Set());
+    setIsSending(false);
     stopAutoMode();
   };
 
@@ -400,11 +426,11 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
         </div>
         <div className="text-xs text-gray-300">
           {client.category} | {messageCount}/{client.maxMessages} 消息 | {client.testCases.length} 测试用例
+          {isSending && ' | 发送中...'}
         </div>
       </CardHeader>
       
       <CardContent className="flex-1 flex flex-col p-2 min-h-0">
-        {/* 消息区域 */}
         <ScrollArea className="flex-1 mb-2">
           <div className="space-y-2 pr-2">
             {messages.length === 0 ? (
@@ -449,21 +475,20 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
           </div>
         </ScrollArea>
 
-        {/* 控制按钮 */}
         <div className="flex space-x-2 flex-shrink-0">
           <Button
             onClick={handleSendMessage}
-            disabled={!apiKey || messageCount >= client.maxMessages}
+            disabled={!apiKey || messageCount >= client.maxMessages || isSending}
             size="sm"
             className="flex-1 bg-orange-600 hover:bg-orange-700 text-white text-xs"
           >
-            手动发送
+            {isSending ? '发送中...' : '手动发送'}
           </Button>
           
           {!isLocalActive ? (
             <Button
               onClick={startManualAutoMode}
-              disabled={!apiKey || messageCount >= client.maxMessages}
+              disabled={!apiKey || messageCount >= client.maxMessages || isSending}
               size="sm"
               className="bg-green-600 hover:bg-green-700 text-white"
             >
