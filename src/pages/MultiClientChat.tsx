@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -74,7 +73,6 @@ const MultiClientChat = () => {
       if (clientsError) throw clientsError;
 
       if (clientsData && clientsData.length > 0) {
-        // 为每个客户加载测试用例
         const clientsWithTestCases = await Promise.all(
           clientsData.map(async (client) => {
             const categoryTestCases = testCases.filter(tc => tc.category === client.category);
@@ -93,12 +91,14 @@ const MultiClientChat = () => {
 
         setClients(clientsWithTestCases);
         
-        // 初始化消息计数
+        // 初始化客户消息计数（只统计客户发送的消息）
         const counts: {[key: string]: number} = {};
         clientsWithTestCases.forEach((client) => {
           counts[client.id] = 0;
         });
         setClientMessageCounts(counts);
+        
+        console.log('加载的AI客户:', clientsWithTestCases);
       }
     } catch (error) {
       console.error('加载AI客户失败:', error);
@@ -268,6 +268,7 @@ const MultiClientChat = () => {
   const updateClientMessageCount = (clientId: string, count: number) => {
     setClientMessageCounts(prev => {
       const newCounts = {...prev, [clientId]: count};
+      console.log(`更新客户 ${clientId} 消息计数: ${count}`);
       return newCounts;
     });
   };
@@ -310,7 +311,9 @@ const MultiClientChat = () => {
     // 只激活还未达到限制的客户
     setClients(prev => prev.map(c => {
       const messageCount = clientMessageCounts[c.id] || 0;
-      return { ...c, isActive: messageCount < c.max_messages };
+      const shouldActivate = messageCount < c.max_messages;
+      console.log(`客户 ${c.name}: 消息数 ${messageCount}/${c.max_messages}, 激活: ${shouldActivate}`);
+      return { ...c, isActive: shouldActivate };
     }));
     
     toast({
@@ -429,6 +432,7 @@ const MultiClientChat = () => {
             <span>活跃客户: {clients.filter(c => c.isActive).length}/{clients.length}</span>
             <span>可用类别: {categories.length}</span>
             <span>测试用例: {testCases.length}</span>
+            <span>总客户消息: {Object.values(clientMessageCounts).reduce((sum, count) => sum + count, 0)}</span>
             <span className={apiKey ? "text-green-300" : "text-red-300"}>
               API状态: {apiKey ? "已配置" : "未配置"}
             </span>

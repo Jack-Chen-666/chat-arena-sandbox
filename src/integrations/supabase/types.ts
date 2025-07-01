@@ -126,30 +126,6 @@ export type Database = {
           },
         ]
       }
-      knowledge_documents: {
-        Row: {
-          content: string
-          created_at: string
-          file_type: string
-          filename: string
-          id: string
-        }
-        Insert: {
-          content: string
-          created_at?: string
-          file_type: string
-          filename: string
-          id?: string
-        }
-        Update: {
-          content?: string
-          created_at?: string
-          file_type?: string
-          filename?: string
-          id?: string
-        }
-        Relationships: []
-      }
       test_cases: {
         Row: {
           attack_type: string
