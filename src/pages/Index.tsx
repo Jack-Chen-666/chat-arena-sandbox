@@ -371,9 +371,9 @@ const Index = () => {
           </div>
 
           {/* 右侧对话历史区域 - 扩大宽度 */}
-          <div className="w-96 flex flex-col">
-            <Card className="flex-1 bg-white/10 backdrop-blur-md border-white/20 flex flex-col">
-              <CardHeader className="pb-3">
+          <div className="w-96 flex flex-col min-h-0">
+            <Card className="h-full bg-white/10 backdrop-blur-md border-white/20 flex flex-col">
+              <CardHeader className="pb-3 flex-shrink-0">
                 <CardTitle className="text-white flex items-center">
                   <History className="h-5 w-5 mr-2" />
                   对话历史
