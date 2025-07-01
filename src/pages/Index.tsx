@@ -183,7 +183,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      <div className="container mx-auto h-screen flex flex-col">
+      <div className="w-full h-screen flex flex-col">
         {/* 顶部导航 */}
         <div className="bg-white/10 backdrop-blur-md border-b border-white/20 p-4">
           <div className="flex items-center justify-between">

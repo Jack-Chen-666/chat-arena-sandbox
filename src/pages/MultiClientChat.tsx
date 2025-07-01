@@ -535,7 +535,7 @@ const MultiClientChat = () => {
           ) : (
             <div className="h-full px-4 py-4">
               <div className="h-full overflow-y-auto">
-                <div className="grid grid-cols-3 gap-4 max-w-6xl mx-auto">
+                <div className="grid grid-cols-3 gap-4">
                   {clients.map(client => (
                     <div key={client.id} className="w-full">
                       <ClientChatRoom
