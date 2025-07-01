@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -498,7 +497,7 @@ const MultiClientChat = () => {
           </div>
         </div>
 
-        {/* 客户对话区域 - 优化布局 */}
+        {/* 客户对话区域 - 调整布局适配 */}
         <div className="flex-1 overflow-hidden">
           {isLoading ? (
             <div className="h-full flex items-center justify-center">
@@ -534,9 +533,9 @@ const MultiClientChat = () => {
               </Card>
             </div>
           ) : (
-            <div className="h-full px-2 py-3">
+            <div className="h-full px-4 py-4">
               <div className="h-full overflow-y-auto">
-                <div className="grid grid-cols-3 gap-3 max-w-full">
+                <div className="grid grid-cols-3 gap-4 max-w-full">
                   {clients.map(client => (
                     <div key={client.id} className="w-full">
                       <ClientChatRoom

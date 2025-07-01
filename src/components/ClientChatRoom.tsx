@@ -442,7 +442,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
 
   return (
     <>
-      <Card className={`backdrop-blur-md border h-[600px] flex flex-col transition-all duration-300 ${
+      <Card className={`backdrop-blur-md border h-[450px] flex flex-col transition-all duration-300 ${
         isAtLimit 
           ? 'bg-red-900/20 border-red-500/50 shadow-lg shadow-red-500/20' 
           : 'bg-white/10 border-white/20'
