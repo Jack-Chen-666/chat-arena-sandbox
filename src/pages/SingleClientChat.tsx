@@ -3,9 +3,10 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ArrowLeft, Bot, User, Play, Pause, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Bot, User, Play, Pause, RotateCcw, TrendingUp } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import AttackHeatmapModal from '@/components/AttackHeatmapModal';
 
 interface Message {
   id: string;
@@ -45,6 +46,7 @@ const SingleClientChat = () => {
   const [usedTestCases, setUsedTestCases] = useState<Set<string>>(new Set());
   const [apiKey] = useState(() => localStorage.getItem('deepseek-api-key') || '');
   const [systemPrompt] = useState(() => localStorage.getItem('system-prompt') || '你是一个专业的AI客服助手，请礼貌、耐心地回答用户的问题。');
+  const [showHeatmap, setShowHeatmap] = useState(false);
 
   const autoModeRef = useRef<NodeJS.Timeout>();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -267,6 +269,15 @@ const SingleClientChat = () => {
             
             <div className="flex items-center space-x-2">
               <Button
+                onClick={() => setShowHeatmap(true)}
+                variant="outline"
+                size="sm"
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              >
+                <TrendingUp className="h-4 w-4 mr-2" />
+                攻击热力图
+              </Button>
+              <Button
                 onClick={clearMessages}
                 variant="outline"
                 size="sm"
@@ -348,6 +359,14 @@ const SingleClientChat = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* 攻击热力图模态框 */}
+        <AttackHeatmapModal
+          isOpen={showHeatmap}
+          onClose={() => setShowHeatmap(false)}
+          messages={messages}
+          clientName={client?.name || "单客户对话"}
+        />
       </div>
     </div>
   );

@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Bot, User, Play, Pause, Settings, Trash2, RotateCcw, Maximize2 } from 'lucide-react';
+import { Bot, User, Play, Pause, Settings, Trash2, RotateCcw, Maximize2, TrendingUp } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { DEFAULT_SYSTEM_PROMPT } from './SystemPromptEditor';
 import { useNavigate } from 'react-router-dom';
 import CoolNotification from './CoolNotification';
+import AttackHeatmapModal from './AttackHeatmapModal';
 
 interface Message {
   id: string;
@@ -66,6 +67,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     localStorage.getItem('system-prompt') || DEFAULT_SYSTEM_PROMPT
   );
   const [showLimitNotification, setShowLimitNotification] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState(false);
 
   // 使用useRef来持有最新的状态，避免在闭包中获取到陈旧的状态
   const stateRef = useRef({
@@ -442,7 +444,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
 
   return (
     <>
-      <Card className={`backdrop-blur-md border h-[450px] flex flex-col transition-all duration-300 ${
+      <Card className={`backdrop-blur-md border h-[500px] flex flex-col transition-all duration-300 ${
         isAtLimit 
           ? 'bg-red-900/20 border-red-500/50 shadow-lg shadow-red-500/20' 
           : 'bg-white/10 border-white/20'
@@ -466,10 +468,20 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
             </CardTitle>
             <div className="flex space-x-1">
               <Button
+                onClick={() => setShowHeatmap(true)}
+                variant="ghost"
+                size="sm"
+                className="text-red-300 hover:bg-red-500/20 p-1 h-auto"
+                title="查看攻击热力图"
+              >
+                <TrendingUp className="h-3 w-3" />
+              </Button>
+              <Button
                 onClick={openInFullscreen}
                 variant="ghost"
                 size="sm"
                 className="text-white hover:bg-white/20 p-1 h-auto"
+                title="全屏模式"
               >
                 <Maximize2 className="h-3 w-3" />
               </Button>
@@ -478,6 +490,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
                 variant="ghost"
                 size="sm"
                 className="text-white hover:bg-white/20 p-1 h-auto"
+                title="编辑配置"
               >
                 <Settings className="h-3 w-3" />
               </Button>
@@ -486,6 +499,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
                 variant="ghost"
                 size="sm"
                 className="text-white hover:bg-white/20 p-1 h-auto"
+                title="清空消息"
               >
                 <RotateCcw className="h-3 w-3" />
               </Button>
@@ -494,6 +508,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
                 variant="ghost"
                 size="sm"
                 className="text-red-300 hover:bg-red-500/20 p-1 h-auto"
+                title="删除客户"
               >
                 <Trash2 className="h-3 w-3" />
               </Button>
@@ -600,6 +615,14 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
         isVisible={showLimitNotification}
         clientName={client.name}
         onClose={() => setShowLimitNotification(false)}
+      />
+
+      {/* 攻击热力图模态框 */}
+      <AttackHeatmapModal
+        isOpen={showHeatmap}
+        onClose={() => setShowHeatmap(false)}
+        messages={messages}
+        clientName={client.name}
       />
     </>
   );

@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ArrowLeft, Upload, FileText, MessageSquare, User, Bot, Settings, History, Send } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, MessageSquare, User, Bot, Settings, History, Send, TrendingUp } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
+import AttackHeatmapModal from '@/components/AttackHeatmapModal';
 
 interface Message {
   id: string;
@@ -33,6 +34,7 @@ const Index = () => {
   const [systemPrompt, setSystemPrompt] = useState(() => localStorage.getItem('system-prompt') || '你是一个专业的AI客服助手，请礼貌、耐心地回答用户的问题。');
   const [showSettings, setShowSettings] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<Conversation[]>([]);
+  const [showHeatmap, setShowHeatmap] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -255,7 +257,7 @@ const Index = () => {
         )}
 
         {/* 主要内容区域 - 扩大左右区域 */}
-        <div className="flex-1 flex gap-4 p-4 min-h-0">
+        <div className="flex-1 flex gap-4 p-4 min-h-0 max-w-full">
           {/* 左侧聊天区域 - 扩大宽度 */}
           <div className="flex-1 flex flex-col min-w-0">
             <Card className="flex-1 bg-white/10 backdrop-blur-md border-white/20 flex flex-col">
@@ -266,6 +268,14 @@ const Index = () => {
                     实时对话测试
                   </CardTitle>
                   <div className="flex space-x-2">
+                    <Button 
+                      size="sm" 
+                      onClick={() => setShowHeatmap(true)}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      <TrendingUp className="h-4 w-4 mr-1" />
+                      攻击热力图
+                    </Button>
                     <Link to="/multi-client">
                       <Button size="sm" className="bg-purple-600 hover:bg-purple-700">
                         多客户测试
@@ -409,6 +419,14 @@ const Index = () => {
             </Card>
           </div>
         </div>
+
+        {/* 攻击热力图模态框 */}
+        <AttackHeatmapModal
+          isOpen={showHeatmap}
+          onClose={() => setShowHeatmap(false)}
+          messages={messages}
+          clientName="首页对话"
+        />
       </div>
     </div>
   );
