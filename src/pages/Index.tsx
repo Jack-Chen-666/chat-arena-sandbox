@@ -44,14 +44,18 @@ const Index = () => {
 
   const loadConversations = async () => {
     try {
+      // 只加载手动对话记录，排除多客户测试的记录
       const { data, error } = await supabase
         .from('conversations')
         .select('*')
+        .eq('test_mode', 'manual')
+        .is('ai_client_id', null) // 只显示手动对话，不显示AI客户的对话
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(20); // 限制显示最近20条记录
 
       if (error) throw error;
       
+      console.log('加载的对话记录:', data);
       setConversations(data || []);
     } catch (error) {
       console.error('加载对话记录失败:', error);
@@ -124,18 +128,12 @@ const Index = () => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const messageToSend = currentMessage;
     setCurrentMessage('');
     setIsLoading(true);
 
     try {
-      // 保存对话记录
-      await supabase.from('conversations').insert({
-        customer_message: currentMessage,
-        service_response: '',
-        test_mode: 'manual'
-      });
-
-      const response = await callDeepSeekAPI(currentMessage);
+      const response = await callDeepSeekAPI(messageToSend);
       
       const serviceMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -146,17 +144,30 @@ const Index = () => {
 
       setMessages(prev => [...prev, serviceMessage]);
 
-      // 更新对话记录
-      await supabase
-        .from('conversations')
-        .update({ service_response: response })
-        .eq('customer_message', currentMessage)
-        .order('created_at', { ascending: false })
-        .limit(1);
+      // 保存对话记录到数据库
+      const { error } = await supabase.from('conversations').insert({
+        customer_message: messageToSend,
+        service_response: response,
+        test_mode: 'manual',
+        chat_type: 'single',
+        ai_client_id: null // 手动对话不关联AI客户
+      });
 
-      loadConversations();
+      if (error) {
+        console.error('保存对话记录失败:', error);
+      } else {
+        console.log('对话记录已保存');
+        // 重新加载对话历史
+        loadConversations();
+      }
+
     } catch (error) {
       console.error('发送消息失败:', error);
+      toast({
+        title: "发送失败",
+        description: "消息发送失败，请检查API密钥和网络连接",
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }
@@ -296,25 +307,33 @@ const Index = () => {
           <div className="w-80 p-4 pl-0">
             <Card className="h-full bg-white/10 backdrop-blur-md border-white/20">
               <CardHeader>
-                <CardTitle className="text-white text-sm">对话历史</CardTitle>
+                <CardTitle className="text-white text-sm">手动对话历史</CardTitle>
+                <p className="text-xs text-gray-400">仅显示手动对话记录</p>
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto">
                 <div className="space-y-3">
-                  {conversations.map((conv) => (
-                    <div key={conv.id} className="bg-white/10 rounded-lg p-3">
-                      <div className="text-xs text-blue-300 mb-1">客户:</div>
-                      <div className="text-xs text-white mb-2 line-clamp-2">
-                        {conv.customer_message}
-                      </div>
-                      <div className="text-xs text-green-300 mb-1">客服:</div>
-                      <div className="text-xs text-gray-300 line-clamp-2">
-                        {conv.service_response}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-2">
-                        {new Date(conv.created_at).toLocaleString()}
-                      </div>
+                  {conversations.length === 0 ? (
+                    <div className="text-center text-gray-400 text-sm mt-8">
+                      <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>暂无对话记录</p>
                     </div>
-                  ))}
+                  ) : (
+                    conversations.map((conv) => (
+                      <div key={conv.id} className="bg-white/10 rounded-lg p-3 border border-white/10">
+                        <div className="text-xs text-blue-300 mb-1 font-medium">客户消息:</div>
+                        <div className="text-xs text-white mb-2 line-clamp-3 bg-white/5 p-2 rounded">
+                          {conv.customer_message}
+                        </div>
+                        <div className="text-xs text-green-300 mb-1 font-medium">AI客服回复:</div>
+                        <div className="text-xs text-gray-300 line-clamp-3 bg-white/5 p-2 rounded mb-2">
+                          {conv.service_response}
+                        </div>
+                        <div className="text-xs text-gray-500 text-right">
+                          {new Date(conv.created_at).toLocaleString('zh-CN')}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>

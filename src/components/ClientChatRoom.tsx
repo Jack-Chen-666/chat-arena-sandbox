@@ -229,11 +229,11 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
 
   const saveConversationToDatabase = async (customerMessage: string, serviceResponse: string, testCaseId?: string) => {
     try {
-      console.log('保存对话记录:', {
+      console.log('准备保存对话记录:', {
         ai_client_id: client.id,
         customer_message: customerMessage,
         service_response: serviceResponse,
-        test_case_id: testCaseId,
+        test_case_id: testCaseId || null,
         chat_type: 'multi_client',
         test_mode: 'multi_client'
       });
@@ -242,18 +242,24 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
         ai_client_id: client.id,
         customer_message: customerMessage,
         service_response: serviceResponse,
-        test_case_id: testCaseId,
+        test_case_id: testCaseId || null,
         chat_type: 'multi_client',
         test_mode: 'multi_client'
       });
 
       if (error) {
         console.error('保存对话记录失败:', error);
+        throw error;
       } else {
-        console.log('对话记录已保存:', data);
+        console.log('对话记录已成功保存:', data);
       }
     } catch (error) {
       console.error('保存对话记录异常:', error);
+      toast({
+        title: "保存失败",
+        description: "对话记录保存失败，请检查网络连接",
+        variant: "destructive"
+      });
     }
   };
 
@@ -286,7 +292,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     try {
       // AI客户发送消息
       const customerMessage = await generateCustomerMessage();
-      addMessage(customerMessage, 'customer');
+      const customerMsg = addMessage(customerMessage, 'customer');
       
       // 立即检查是否达到限制（因为addMessage已经增加了计数）
       const newCount = customerMessageCount + 1;
@@ -308,13 +314,15 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
       setTimeout(async () => {
         try {
           const serviceReply = await callDeepSeekAPI(customerMessage);
-          addMessage(serviceReply, 'service');
+          const serviceMsg = addMessage(serviceReply, 'service');
           
-          // 保存对话记录到数据库
+          // 保存对话记录到数据库 - 确保在服务回复后保存
           await saveConversationToDatabase(customerMessage, serviceReply);
             
         } catch (error) {
           console.error('AI客服回复失败:', error);
+          // 即使AI回复失败，也要保存客户消息
+          await saveConversationToDatabase(customerMessage, '系统错误：AI客服暂时无法回复');
         } finally {
           setIsSending(false);
         }
