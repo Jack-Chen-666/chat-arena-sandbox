@@ -1,17 +1,18 @@
+
 import React, { useState, useEffect } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Upload, FileText, Settings, MessageSquare, Users, Key } from 'lucide-react';
+import { Key } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { DEFAULT_SYSTEM_PROMPT } from '@/components/SystemPromptEditor';
 import { SystemPromptEditor } from '@/components/SystemPromptEditor';
 import DocumentUploader from '@/components/DocumentUploader';
-import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
+import HeaderSection from '@/components/HeaderSection';
+import ChatInterface from '@/components/ChatInterface';
+import ConversationHistory from '@/components/ConversationHistory';
 
 interface Message {
   id: string;
@@ -44,14 +45,13 @@ const Index = () => {
 
   const loadConversations = async () => {
     try {
-      // 只加载手动对话记录，排除多客户测试的记录
       const { data, error } = await supabase
         .from('conversations')
         .select('*')
         .eq('test_mode', 'manual')
-        .is('ai_client_id', null) // 只显示手动对话，不显示AI客户的对话
+        .is('ai_client_id', null)
         .order('created_at', { ascending: false })
-        .limit(20); // 限制显示最近20条记录
+        .limit(20);
 
       if (error) throw error;
       
@@ -144,20 +144,18 @@ const Index = () => {
 
       setMessages(prev => [...prev, serviceMessage]);
 
-      // 保存对话记录到数据库
       const { error } = await supabase.from('conversations').insert({
         customer_message: messageToSend,
         service_response: response,
         test_mode: 'manual',
         chat_type: 'single',
-        ai_client_id: null // 手动对话不关联AI客户
+        ai_client_id: null
       });
 
       if (error) {
         console.error('保存对话记录失败:', error);
       } else {
         console.log('对话记录已保存');
-        // 重新加载对话历史
         loadConversations();
       }
 
@@ -180,164 +178,24 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <div className="container mx-auto h-screen flex flex-col">
-        {/* Header */}
-        <div className="bg-white/10 backdrop-blur-md border-b border-white/20 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-white">AI 客服安全测试平台</h1>
-              <p className="text-sm text-gray-300">测试AI客服的安全性和响应能力</p>
-            </div>
-            
-            <div className="flex space-x-2">
-              <Button
-                onClick={() => setShowDocumentUploader(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                上传文档
-              </Button>
-              
-              <Button
-                onClick={() => setShowSystemPrompt(true)}
-                variant="outline"
-                className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-              >
-                <MessageSquare className="h-4 w-4 mr-2" />
-                系统提示词
-              </Button>
-              
-              <Button
-                onClick={() => setShowSettings(true)}
-                variant="outline"
-                className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                设置
-              </Button>
-            </div>
-          </div>
-        </div>
+        <HeaderSection
+          onShowDocumentUploader={() => setShowDocumentUploader(true)}
+          onShowSystemPrompt={() => setShowSystemPrompt(true)}
+          onShowSettings={() => setShowSettings(true)}
+        />
 
-        {/* 主要内容区域 */}
         <div className="flex-1 flex overflow-hidden">
-          {/* 左侧 - 聊天界面 */}
-          <div className="flex-1 flex flex-col p-4">
-            <Card className="flex-1 bg-white/10 backdrop-blur-md border-white/20 flex flex-col">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-white">实时对话测试</CardTitle>
-                  <div className="flex space-x-2">
-                    <Link to="/multi-client">
-                      <Button size="sm" className="bg-purple-600 hover:bg-purple-700">
-                        <Users className="h-4 w-4 mr-2" />
-                        多客户测试
-                      </Button>
-                    </Link>
-                    <Button
-                      onClick={clearChat}
-                      variant="outline"
-                      size="sm"
-                      className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-                    >
-                      清空对话
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              
-              <CardContent className="flex-1 flex flex-col min-h-0">
-                {/* 消息区域 */}
-                <div className="flex-1 overflow-y-auto mb-4 space-y-4">
-                  {messages.length === 0 ? (
-                    <div className="text-center text-gray-400 mt-8">
-                      <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                      <p>开始与AI客服对话...</p>
-                    </div>
-                  ) : (
-                    messages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={`flex ${message.sender === 'service' ? 'justify-start' : 'justify-end'}`}
-                      >
-                        <div className={`max-w-[70%] rounded-lg p-3 ${
-                          message.sender === 'service'
-                            ? 'bg-white/20 text-white'
-                            : 'bg-blue-600 text-white'
-                        }`}>
-                          <p className="text-sm">{message.content}</p>
-                          <p className="text-xs opacity-70 mt-1">
-                            {message.timestamp.toLocaleTimeString()}
-                          </p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                  {isLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-white/20 text-white rounded-lg p-3">
-                        <p className="text-sm">AI客服正在回复...</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
+          <ChatInterface
+            messages={messages}
+            currentMessage={currentMessage}
+            setCurrentMessage={setCurrentMessage}
+            onSendMessage={sendMessage}
+            onClearChat={clearChat}
+            isLoading={isLoading}
+            apiKey={apiKey}
+          />
 
-                {/* 输入区域 */}
-                <div className="flex space-x-2">
-                  <Input
-                    value={currentMessage}
-                    onChange={(e) => setCurrentMessage(e.target.value)}
-                    placeholder="输入您的消息..."
-                    className="flex-1 bg-white/10 border-white/20 text-white placeholder-gray-400"
-                    onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                    disabled={isLoading}
-                  />
-                  <Button
-                    onClick={sendMessage}
-                    disabled={!currentMessage.trim() || isLoading || !apiKey}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    发送
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* 右侧 - 对话历史 */}
-          <div className="w-80 p-4 pl-0">
-            <Card className="h-full bg-white/10 backdrop-blur-md border-white/20">
-              <CardHeader>
-                <CardTitle className="text-white text-sm">手动对话历史</CardTitle>
-                <p className="text-xs text-gray-400">仅显示手动对话记录</p>
-              </CardHeader>
-              <CardContent className="flex-1 overflow-y-auto">
-                <div className="space-y-3">
-                  {conversations.length === 0 ? (
-                    <div className="text-center text-gray-400 text-sm mt-8">
-                      <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                      <p>暂无对话记录</p>
-                    </div>
-                  ) : (
-                    conversations.map((conv) => (
-                      <div key={conv.id} className="bg-white/10 rounded-lg p-3 border border-white/10">
-                        <div className="text-xs text-blue-300 mb-1 font-medium">客户消息:</div>
-                        <div className="text-xs text-white mb-2 line-clamp-3 bg-white/5 p-2 rounded">
-                          {conv.customer_message}
-                        </div>
-                        <div className="text-xs text-green-300 mb-1 font-medium">AI客服回复:</div>
-                        <div className="text-xs text-gray-300 line-clamp-3 bg-white/5 p-2 rounded mb-2">
-                          {conv.service_response}
-                        </div>
-                        <div className="text-xs text-gray-500 text-right">
-                          {new Date(conv.created_at).toLocaleString('zh-CN')}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <ConversationHistory conversations={conversations} />
         </div>
 
         {/* API密钥设置模态框 */}
