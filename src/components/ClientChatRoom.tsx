@@ -242,7 +242,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
         service_response: serviceResponse,
         test_case_id: testCaseId || null,
         chat_type: 'multi_client',
-        test_mode: 'automated'
+        test_mode: 'ai_generated'
       });
 
       const { data, error } = await supabase.from('conversations').insert({
@@ -251,7 +251,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
         service_response: serviceResponse,
         test_case_id: testCaseId || null,
         chat_type: 'multi_client',
-        test_mode: 'automated'
+        test_mode: 'ai_generated'
       });
 
       if (error) {
