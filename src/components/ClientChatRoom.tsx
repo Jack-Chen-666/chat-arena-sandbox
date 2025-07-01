@@ -7,6 +7,7 @@ import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { DEFAULT_SYSTEM_PROMPT } from './SystemPromptEditor';
 import { useNavigate } from 'react-router-dom';
+import CoolNotification from './CoolNotification';
 
 interface Message {
   id: string;
@@ -64,6 +65,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
   const [systemPrompt] = useState(() => 
     localStorage.getItem('system-prompt') || DEFAULT_SYSTEM_PROMPT
   );
+  const [showLimitNotification, setShowLimitNotification] = useState(false);
 
   // 使用useRef来持有最新的状态，避免在闭包中获取到陈旧的状态
   const stateRef = useRef({
@@ -125,6 +127,16 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
 
     return () => clearTimeout(timer);
   }, [customerMessageCount, client.id, onMessageCountChange]);
+
+  // 监听消息计数变化，当达到上限时显示通知
+  useEffect(() => {
+    if (customerMessageCount >= client.max_messages && customerMessageCount > 0) {
+      // 延迟显示通知，确保用户看到最后一条消息
+      setTimeout(() => {
+        setShowLimitNotification(true);
+      }, 1000);
+    }
+  }, [customerMessageCount, client.max_messages]);
 
   const addMessage = (content: string, sender: 'customer' | 'service') => {
     const newMessage: Message = {
@@ -429,131 +441,140 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
   const isAtLimit = customerMessageCount >= client.max_messages;
 
   return (
-    <Card className="bg-white/10 backdrop-blur-md border-white/20 h-[500px] flex flex-col">
-      <CardHeader className="pb-2 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-white text-sm flex items-center">
-            <div className={`w-2 h-2 rounded-full mr-2 ${getStatusColor()}`} />
-            {client.name}
-          </CardTitle>
-          <div className="flex space-x-1">
-            <Button
-              onClick={openInFullscreen}
-              variant="ghost"
-              size="sm"
-              className="text-white hover:bg-white/20 p-1 h-auto"
-            >
-              <Maximize2 className="h-3 w-3" />
-            </Button>
-            <Button
-              onClick={onEdit}
-              variant="ghost"
-              size="sm"
-              className="text-white hover:bg-white/20 p-1 h-auto"
-            >
-              <Settings className="h-3 w-3" />
-            </Button>
-            <Button
-              onClick={clearMessages}
-              variant="ghost"
-              size="sm"
-              className="text-white hover:bg-white/20 p-1 h-auto"
-            >
-              <RotateCcw className="h-3 w-3" />
-            </Button>
-            <Button
-              onClick={onDelete}
-              variant="ghost"
-              size="sm"
-              className="text-red-300 hover:bg-red-500/20 p-1 h-auto"
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
+    <>
+      <Card className="bg-white/10 backdrop-blur-md border-white/20 h-[500px] flex flex-col">
+        <CardHeader className="pb-2 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-white text-sm flex items-center">
+              <div className={`w-2 h-2 rounded-full mr-2 ${getStatusColor()}`} />
+              {client.name}
+            </CardTitle>
+            <div className="flex space-x-1">
+              <Button
+                onClick={openInFullscreen}
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/20 p-1 h-auto"
+              >
+                <Maximize2 className="h-3 w-3" />
+              </Button>
+              <Button
+                onClick={onEdit}
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/20 p-1 h-auto"
+              >
+                <Settings className="h-3 w-3" />
+              </Button>
+              <Button
+                onClick={clearMessages}
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/20 p-1 h-auto"
+              >
+                <RotateCcw className="h-3 w-3" />
+              </Button>
+              <Button
+                onClick={onDelete}
+                variant="ghost"
+                size="sm"
+                className="text-red-300 hover:bg-red-500/20 p-1 h-auto"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
-        </div>
-        <div className="text-xs text-gray-300">
-          {client.category} | 客户消息: {customerMessageCount}/{client.max_messages} | {client.testCases.length} 测试用例
-          {isSending && ' | 发送中...'}
-          {isAtLimit && ' | 已达上限'}
-        </div>
-      </CardHeader>
-      
-      <CardContent className="flex-1 flex flex-col p-2 min-h-0">
-        <ScrollArea className="flex-1 mb-2">
-          <div className="space-y-2 pr-2">
-            {messages.length === 0 ? (
-              <div className="text-center text-gray-400 text-xs mt-8">
-                <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>等待对话开始...</p>
-              </div>
-            ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.sender === 'service' ? 'justify-start' : 'justify-end'}`}
-                >
-                  <div className={`flex items-start space-x-1 max-w-[80%] ${message.sender === 'customer' ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      message.sender === 'service' 
-                        ? 'bg-blue-500' 
-                        : 'bg-orange-500'
-                    }`}>
-                      {message.sender === 'service' ? (
-                        <Bot className="h-3 w-3 text-white" />
-                      ) : (
-                        <User className="h-3 w-3 text-white" />
-                      )}
-                    </div>
-                    
-                    <div className={`rounded-lg p-2 ${
-                      message.sender === 'service'
-                        ? 'bg-blue-600/80 text-white'
-                        : 'bg-white/20 text-white'
-                    }`}>
-                      <p className="text-xs leading-relaxed">{message.content}</p>
-                      <p className="text-xs opacity-70 mt-1">
-                        {formatTime(message.timestamp)}
-                      </p>
+          <div className="text-xs text-gray-300">
+            {client.category} | 客户消息: {customerMessageCount}/{client.max_messages} | {client.testCases.length} 测试用例
+            {isSending && ' | 发送中...'}
+            {isAtLimit && ' | 已达上限'}
+          </div>
+        </CardHeader>
+        
+        <CardContent className="flex-1 flex flex-col p-2 min-h-0">
+          <ScrollArea className="flex-1 mb-2">
+            <div className="space-y-2 pr-2">
+              {messages.length === 0 ? (
+                <div className="text-center text-gray-400 text-xs mt-8">
+                  <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>等待对话开始...</p>
+                </div>
+              ) : (
+                messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex ${message.sender === 'service' ? 'justify-start' : 'justify-end'}`}
+                  >
+                    <div className={`flex items-start space-x-1 max-w-[80%] ${message.sender === 'customer' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        message.sender === 'service' 
+                          ? 'bg-blue-500' 
+                          : 'bg-orange-500'
+                      }`}>
+                        {message.sender === 'service' ? (
+                          <Bot className="h-3 w-3 text-white" />
+                        ) : (
+                          <User className="h-3 w-3 text-white" />
+                        )}
+                      </div>
+                      
+                      <div className={`rounded-lg p-2 ${
+                        message.sender === 'service'
+                          ? 'bg-blue-600/80 text-white'
+                          : 'bg-white/20 text-white'
+                      }`}>
+                        <p className="text-xs leading-relaxed">{message.content}</p>
+                        <p className="text-xs opacity-70 mt-1">
+                          {formatTime(message.timestamp)}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        </ScrollArea>
+                ))
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          </ScrollArea>
 
-        <div className="flex space-x-2 flex-shrink-0">
-          <Button
-            onClick={handleSendMessage}
-            disabled={!apiKey || isAtLimit || isSending}
-            size="sm"
-            className="flex-1 bg-orange-600 hover:bg-orange-700 text-white text-xs disabled:opacity-50"
-          >
-            {isSending ? '发送中...' : '手动发送'}
-          </Button>
-          
-          {!isLocalActive ? (
+          <div className="flex space-x-2 flex-shrink-0">
             <Button
-              onClick={startManualAutoMode}
+              onClick={handleSendMessage}
               disabled={!apiKey || isAtLimit || isSending}
               size="sm"
-              className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+              className="flex-1 bg-orange-600 hover:bg-orange-700 text-white text-xs disabled:opacity-50"
             >
-              <Play className="h-3 w-3" />
+              {isSending ? '发送中...' : '手动发送'}
             </Button>
-          ) : (
-            <Button
-              onClick={stopManualAutoMode}
-              size="sm"
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              <Pause className="h-3 w-3" />
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+            
+            {!isLocalActive ? (
+              <Button
+                onClick={startManualAutoMode}
+                disabled={!apiKey || isAtLimit || isSending}
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+              >
+                <Play className="h-3 w-3" />
+              </Button>
+            ) : (
+              <Button
+                onClick={stopManualAutoMode}
+                size="sm"
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Pause className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 炫酷通知 */}
+      <CoolNotification
+        isVisible={showLimitNotification}
+        clientName={client.name}
+        onClose={() => setShowLimitNotification(false)}
+      />
+    </>
   );
 };
 
