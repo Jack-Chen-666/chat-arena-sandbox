@@ -24,9 +24,9 @@ interface AIClient {
   category: string;
   prompt: string;
   max_messages: number;
+  use_random_generation: boolean;
   isActive: boolean;
   testCases: TestCase[];
-  use_random_generation?: boolean;
 }
 
 const MultiClientChat = () => {
@@ -134,8 +134,8 @@ const MultiClientChat = () => {
             name: clientData.name,
             category: clientData.category,
             prompt: clientData.prompt,
-            max_messages: clientData.maxMessages,
-            use_random_generation: clientData.useRandomGeneration || false
+            max_messages: clientData.max_messages,
+            use_random_generation: clientData.use_random_generation
           })
           .eq('id', editingClient.id);
 
@@ -171,8 +171,8 @@ const MultiClientChat = () => {
             name: clientData.name,
             category: clientData.category,
             prompt: clientData.prompt,
-            max_messages: clientData.maxMessages,
-            use_random_generation: clientData.useRandomGeneration || false
+            max_messages: clientData.max_messages,
+            use_random_generation: clientData.use_random_generation
           })
           .select()
           .single();
