@@ -38,10 +38,38 @@ const MultiClientChat = () => {
   const [isGlobalAutoMode, setIsGlobalAutoMode] = useState(false);
   const [clientMessageCounts, setClientMessageCounts] = useState<{[key: string]: number}>({});
   const [apiKey] = useState(() => localStorage.getItem('deepseek-api-key') || '');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadTestCases();
-    loadAIClients();
+    const initializeData = async () => {
+      setIsLoading(true);
+      
+      // 先加载测试用例
+      try {
+        const { data, error } = await supabase
+          .from('test_cases')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        
+        const testCasesData = data || [];
+        setTestCases(testCasesData);
+        const uniqueCategories = [...new Set(testCasesData.map(tc => tc.category))];
+        setCategories(uniqueCategories);
+        
+        console.log('加载的测试用例:', testCasesData);
+        
+        // 然后加载AI客户，传入测试用例数据
+        await loadAIClients(testCasesData);
+      } catch (error) {
+        console.error('加载测试用例失败:', error);
+      }
+      
+      setIsLoading(false);
+    };
+    
+    initializeData();
   }, []);
 
   const loadTestCases = async () => {
@@ -53,17 +81,21 @@ const MultiClientChat = () => {
 
       if (error) throw error;
       
-      setTestCases(data || []);
-      const uniqueCategories = [...new Set(data?.map(tc => tc.category) || [])];
+      const testCasesData = data || [];
+      setTestCases(testCasesData);
+      const uniqueCategories = [...new Set(testCasesData.map(tc => tc.category))];
       setCategories(uniqueCategories);
       
-      console.log('加载的测试用例:', data);
+      console.log('加载的测试用例:', testCasesData);
+      
+      // 重新加载客户以更新测试用例
+      await loadAIClients(testCasesData);
     } catch (error) {
       console.error('加载测试用例失败:', error);
     }
   };
 
-  const loadAIClients = async () => {
+  const loadAIClients = async (currentTestCases?: TestCase[]) => {
     try {
       const { data: clientsData, error: clientsError } = await supabase
         .from('ai_clients')
@@ -73,9 +105,10 @@ const MultiClientChat = () => {
       if (clientsError) throw clientsError;
 
       if (clientsData && clientsData.length > 0) {
+        const testCasesToUse = currentTestCases || testCases;
         const clientsWithTestCases = await Promise.all(
           clientsData.map(async (client) => {
-            const categoryTestCases = testCases.filter(tc => tc.category === client.category);
+            const categoryTestCases = testCasesToUse.filter(tc => tc.category === client.category);
             return {
               id: client.id,
               name: client.name,
@@ -105,12 +138,7 @@ const MultiClientChat = () => {
     }
   };
 
-  // 当测试用例加载完成后，重新加载客户以更新测试用例
-  useEffect(() => {
-    if (testCases.length > 0) {
-      loadAIClients();
-    }
-  }, [testCases.length]);
+
 
   const createNewClient = () => {
     setEditingClient(null);
@@ -441,7 +469,15 @@ const MultiClientChat = () => {
 
         {/* 客户对话区域 */}
         <div className="flex-1 overflow-hidden">
-          {clients.length === 0 ? (
+          {isLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <Card className="bg-white/10 backdrop-blur-md border-white/20 p-8">
+                <CardContent className="text-center">
+                  <h3 className="text-lg font-semibold text-white mb-2">加载中...</h3>
+                </CardContent>
+              </Card>
+            </div>
+          ) : clients.length === 0 ? (
             <div className="h-full flex items-center justify-center">
               <Card className="bg-white/10 backdrop-blur-md border-white/20 p-8">
                 <CardContent className="text-center">
