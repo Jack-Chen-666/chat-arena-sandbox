@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +11,7 @@ import { DEFAULT_SYSTEM_PROMPT } from '@/components/SystemPromptEditor';
 import { SystemPromptEditor } from '@/components/SystemPromptEditor';
 import DocumentUploader from '@/components/DocumentUploader';
 import { Link } from 'react-router-dom';
+import { toast } from '@/hooks/use-toast';
 
 interface Message {
   id: string;
