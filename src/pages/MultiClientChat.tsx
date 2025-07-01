@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,10 +23,10 @@ interface AIClient {
   name: string;
   category: string;
   prompt: string;
-  maxMessages: number;
+  max_messages: number;
   isActive: boolean;
   testCases: TestCase[];
-  useRandomGeneration?: boolean;
+  use_random_generation?: boolean;
 }
 
 const MultiClientChat = () => {
@@ -41,29 +42,8 @@ const MultiClientChat = () => {
 
   useEffect(() => {
     loadTestCases();
-    const savedClients = localStorage.getItem('ai-clients');
-    if (savedClients) {
-      try {
-        const parsedClients = JSON.parse(savedClients);
-        setClients(parsedClients);
-        
-        // 初始化消息计数
-        const counts: {[key: string]: number} = {};
-        parsedClients.forEach((client: AIClient) => {
-          counts[client.id] = 0;
-        });
-        setClientMessageCounts(counts);
-      } catch (error) {
-        console.error('加载客户配置失败:', error);
-      }
-    }
+    loadAIClients();
   }, []);
-
-  useEffect(() => {
-    if (clients.length > 0) {
-      localStorage.setItem('ai-clients', JSON.stringify(clients));
-    }
-  }, [clients]);
 
   const loadTestCases = async () => {
     try {
@@ -79,11 +59,58 @@ const MultiClientChat = () => {
       setCategories(uniqueCategories);
       
       console.log('加载的测试用例:', data);
-      console.log('类别:', uniqueCategories);
     } catch (error) {
       console.error('加载测试用例失败:', error);
     }
   };
+
+  const loadAIClients = async () => {
+    try {
+      const { data: clientsData, error: clientsError } = await supabase
+        .from('ai_clients')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (clientsError) throw clientsError;
+
+      if (clientsData && clientsData.length > 0) {
+        // 为每个客户加载测试用例
+        const clientsWithTestCases = await Promise.all(
+          clientsData.map(async (client) => {
+            const categoryTestCases = testCases.filter(tc => tc.category === client.category);
+            return {
+              id: client.id,
+              name: client.name,
+              category: client.category,
+              prompt: client.prompt,
+              max_messages: client.max_messages,
+              use_random_generation: client.use_random_generation,
+              isActive: false,
+              testCases: categoryTestCases
+            };
+          })
+        );
+
+        setClients(clientsWithTestCases);
+        
+        // 初始化消息计数
+        const counts: {[key: string]: number} = {};
+        clientsWithTestCases.forEach((client) => {
+          counts[client.id] = 0;
+        });
+        setClientMessageCounts(counts);
+      }
+    } catch (error) {
+      console.error('加载AI客户失败:', error);
+    }
+  };
+
+  // 当测试用例加载完成后，重新加载客户以更新测试用例
+  useEffect(() => {
+    if (testCases.length > 0) {
+      loadAIClients();
+    }
+  }, [testCases.length]);
 
   const createNewClient = () => {
     setEditingClient(null);
@@ -95,31 +122,90 @@ const MultiClientChat = () => {
     setShowConfigModal(true);
   };
 
-  const saveClient = (clientData: Omit<AIClient, 'id' | 'isActive'>) => {
-    const categoryTestCases = testCases.filter(tc => tc.category === clientData.category);
-    
-    if (editingClient) {
-      setClients(prev => prev.map(c => 
-        c.id === editingClient.id 
-          ? { ...clientData, id: editingClient.id, isActive: c.isActive, testCases: categoryTestCases }
-          : c
-      ));
+  const saveClient = async (clientData: Omit<AIClient, 'id' | 'isActive'>) => {
+    try {
+      const categoryTestCases = testCases.filter(tc => tc.category === clientData.category);
+      
+      if (editingClient) {
+        // 更新现有客户
+        const { error: updateError } = await supabase
+          .from('ai_clients')
+          .update({
+            name: clientData.name,
+            category: clientData.category,
+            prompt: clientData.prompt,
+            max_messages: clientData.maxMessages,
+            use_random_generation: clientData.useRandomGeneration || false
+          })
+          .eq('id', editingClient.id);
+
+        if (updateError) throw updateError;
+
+        // 删除旧的测试用例关联
+        await supabase
+          .from('ai_client_test_cases')
+          .delete()
+          .eq('ai_client_id', editingClient.id);
+
+        // 创建新的测试用例关联
+        if (categoryTestCases.length > 0) {
+          const testCaseLinks = categoryTestCases.map(tc => ({
+            ai_client_id: editingClient.id,
+            test_case_id: tc.id
+          }));
+
+          await supabase
+            .from('ai_client_test_cases')
+            .insert(testCaseLinks);
+        }
+
+        toast({
+          title: "客户配置已更新",
+          description: `${clientData.name} 的配置已成功更新`,
+        });
+      } else {
+        // 创建新客户
+        const { data: newClient, error: insertError } = await supabase
+          .from('ai_clients')
+          .insert({
+            name: clientData.name,
+            category: clientData.category,
+            prompt: clientData.prompt,
+            max_messages: clientData.maxMessages,
+            use_random_generation: clientData.useRandomGeneration || false
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
+        // 创建测试用例关联
+        if (categoryTestCases.length > 0) {
+          const testCaseLinks = categoryTestCases.map(tc => ({
+            ai_client_id: newClient.id,
+            test_case_id: tc.id
+          }));
+
+          await supabase
+            .from('ai_client_test_cases')
+            .insert(testCaseLinks);
+        }
+
+        toast({
+          title: "新客户已创建",
+          description: `${clientData.name} 已成功创建`,
+        });
+      }
+
+      // 重新加载客户列表
+      await loadAIClients();
+      
+    } catch (error) {
+      console.error('保存AI客户失败:', error);
       toast({
-        title: "客户配置已更新",
-        description: `${clientData.name} 的配置已成功更新`,
-      });
-    } else {
-      const newClient: AIClient = {
-        ...clientData,
-        id: Date.now().toString(),
-        isActive: false,
-        testCases: categoryTestCases
-      };
-      setClients(prev => [...prev, newClient]);
-      setClientMessageCounts(prev => ({...prev, [newClient.id]: 0}));
-      toast({
-        title: "新客户已创建",
-        description: `${clientData.name} 已成功创建`,
+        title: "操作失败",
+        description: "保存AI客户时发生错误",
+        variant: "destructive"
       });
     }
     
@@ -127,17 +213,34 @@ const MultiClientChat = () => {
     setEditingClient(null);
   };
 
-  const deleteClient = (clientId: string) => {
-    setClients(prev => prev.filter(c => c.id !== clientId));
-    setClientMessageCounts(prev => {
-      const newCounts = {...prev};
-      delete newCounts[clientId];
-      return newCounts;
-    });
-    toast({
-      title: "客户已删除",
-      description: "AI客户已成功删除",
-    });
+  const deleteClient = async (clientId: string) => {
+    try {
+      const { error } = await supabase
+        .from('ai_clients')
+        .delete()
+        .eq('id', clientId);
+
+      if (error) throw error;
+
+      setClients(prev => prev.filter(c => c.id !== clientId));
+      setClientMessageCounts(prev => {
+        const newCounts = {...prev};
+        delete newCounts[clientId];
+        return newCounts;
+      });
+      
+      toast({
+        title: "客户已删除",
+        description: "AI客户已成功删除",
+      });
+    } catch (error) {
+      console.error('删除AI客户失败:', error);
+      toast({
+        title: "删除失败",
+        description: "删除AI客户时发生错误",
+        variant: "destructive"
+      });
+    }
   };
 
   const toggleClientActive = (clientId: string) => {
@@ -191,7 +294,7 @@ const MultiClientChat = () => {
     // 检查是否有客户还未达到消息上限
     const availableClients = clients.filter(c => {
       const messageCount = clientMessageCounts[c.id] || 0;
-      return messageCount < c.maxMessages;
+      return messageCount < c.max_messages;
     });
 
     if (availableClients.length === 0) {
@@ -207,7 +310,7 @@ const MultiClientChat = () => {
     // 只激活还未达到限制的客户
     setClients(prev => prev.map(c => {
       const messageCount = clientMessageCounts[c.id] || 0;
-      return { ...c, isActive: messageCount < c.maxMessages };
+      return { ...c, isActive: messageCount < c.max_messages };
     }));
     
     toast({

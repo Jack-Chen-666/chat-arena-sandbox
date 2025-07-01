@@ -9,8 +9,79 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      ai_client_test_cases: {
+        Row: {
+          ai_client_id: string
+          created_at: string
+          id: string
+          test_case_id: string
+        }
+        Insert: {
+          ai_client_id: string
+          created_at?: string
+          id?: string
+          test_case_id: string
+        }
+        Update: {
+          ai_client_id?: string
+          created_at?: string
+          id?: string
+          test_case_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_client_test_cases_ai_client_id_fkey"
+            columns: ["ai_client_id"]
+            isOneToOne: false
+            referencedRelation: "ai_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_client_test_cases_test_case_id_fkey"
+            columns: ["test_case_id"]
+            isOneToOne: false
+            referencedRelation: "test_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_clients: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          max_messages: number
+          name: string
+          prompt: string
+          updated_at: string
+          use_random_generation: boolean
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          max_messages?: number
+          name: string
+          prompt: string
+          updated_at?: string
+          use_random_generation?: boolean
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          max_messages?: number
+          name?: string
+          prompt?: string
+          updated_at?: string
+          use_random_generation?: boolean
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
+          ai_client_id: string | null
+          chat_type: string
           created_at: string
           customer_message: string
           id: string
@@ -19,6 +90,8 @@ export type Database = {
           test_mode: string
         }
         Insert: {
+          ai_client_id?: string | null
+          chat_type?: string
           created_at?: string
           customer_message: string
           id?: string
@@ -27,6 +100,8 @@ export type Database = {
           test_mode: string
         }
         Update: {
+          ai_client_id?: string | null
+          chat_type?: string
           created_at?: string
           customer_message?: string
           id?: string
@@ -35,6 +110,13 @@ export type Database = {
           test_mode?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "conversations_ai_client_id_fkey"
+            columns: ["ai_client_id"]
+            isOneToOne: false
+            referencedRelation: "ai_clients"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "conversations_test_case_id_fkey"
             columns: ["test_case_id"]

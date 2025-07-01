@@ -22,16 +22,16 @@ interface AIClient {
   name: string;
   category: string;
   prompt: string;
-  maxMessages: number;
+  max_messages: number;
   isActive: boolean;
   testCases: TestCase[];
-  useRandomGeneration?: boolean;
+  use_random_generation?: boolean;
 }
 
 interface ClientConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (clientData: Omit<AIClient, 'id' | 'isActive'>) => void;
+  onSave: (clientData: Omit<AIClient, 'id' | 'isActive'> & { maxMessages: number; useRandomGeneration: boolean }) => void;
   categories: string[];
   testCases: TestCase[];
   editingClient: AIClient | null;
@@ -85,8 +85,8 @@ const ClientConfigModal: React.FC<ClientConfigModalProps> = ({
       setName(editingClient.name);
       setCategory(editingClient.category);
       setPrompt(editingClient.prompt);
-      setMaxMessages(editingClient.maxMessages);
-      setUseRandomGeneration(editingClient.useRandomGeneration || false);
+      setMaxMessages(editingClient.max_messages);
+      setUseRandomGeneration(editingClient.use_random_generation || false);
     } else {
       setName('');
       setCategory('');

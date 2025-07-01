@@ -29,10 +29,10 @@ interface AIClient {
   name: string;
   category: string;
   prompt: string;
-  maxMessages: number;
+  max_messages: number;
   isActive: boolean;
   testCases: TestCase[];
-  useRandomGeneration?: boolean;
+  use_random_generation?: boolean;
 }
 
 interface ClientChatRoomProps {
@@ -202,7 +202,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
       return '你好，我想了解一下你们的产品';
     }
     
-    if (client.useRandomGeneration) {
+    if (client.use_random_generation) {
       const randomTestCase = client.testCases[Math.floor(Math.random() * client.testCases.length)];
       return await generateRandomTestCase(randomTestCase);
     } else {
@@ -221,12 +221,27 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     }
   };
 
+  const saveConversationToDatabase = async (customerMessage: string, serviceResponse: string, testCaseId?: string) => {
+    try {
+      await supabase.from('conversations').insert({
+        ai_client_id: client.id,
+        customer_message: customerMessage,
+        service_response: serviceResponse,
+        test_case_id: testCaseId,
+        chat_type: 'multi_client',
+        test_mode: 'multi_client'
+      });
+    } catch (error) {
+      console.error('保存对话记录失败:', error);
+    }
+  };
+
   const handleSendMessage = async () => {
     // 检查是否已达到消息限制
-    if (messageCount >= client.maxMessages) {
+    if (messageCount >= client.max_messages) {
       toast({
         title: `${client.name} 达到消息限制`,
-        description: `已达到最大 ${client.maxMessages} 条消息`,
+        description: `已达到最大 ${client.max_messages} 条消息`,
         variant: "destructive"
       });
       
@@ -254,15 +269,8 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
       const newCount = messageCount + 1;
       setMessageCount(newCount);
       
-      // 保存对话记录
-      await supabase.from('conversations').insert({
-        customer_message: customerMessage,
-        service_response: '',
-        test_mode: 'multi_client'
-      });
-      
       // 检查是否达到限制
-      if (newCount >= client.maxMessages) {
+      if (newCount >= client.max_messages) {
         setIsSending(false);
         stopAutoMode();
         
@@ -272,8 +280,20 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
         
         toast({
           title: `${client.name} 已完成`,
-          description: `已达到最大 ${client.maxMessages} 条消息，自动停止`,
+          description: `已达到最大 ${client.max_messages} 条消息，自动停止`,
         });
+        
+        // 仍然要等待AI客服回复后再保存对话记录
+        setTimeout(async () => {
+          try {
+            const serviceReply = await callDeepSeekAPI(customerMessage);
+            addMessage(serviceReply, 'service');
+            await saveConversationToDatabase(customerMessage, serviceReply);
+          } catch (error) {
+            console.error('AI客服回复失败:', error);
+          }
+        }, 1000);
+        
         return;
       }
       
@@ -283,13 +303,8 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
           const serviceReply = await callDeepSeekAPI(customerMessage);
           addMessage(serviceReply, 'service');
           
-          // 更新对话记录
-          await supabase
-            .from('conversations')
-            .update({ service_response: serviceReply })
-            .eq('customer_message', customerMessage)
-            .order('created_at', { ascending: false })
-            .limit(1);
+          // 保存对话记录到数据库
+          await saveConversationToDatabase(customerMessage, serviceReply);
             
         } catch (error) {
           console.error('AI客服回复失败:', error);
@@ -305,7 +320,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
   };
 
   const startAutoMode = () => {
-    if (messageCount >= client.maxMessages) {
+    if (messageCount >= client.max_messages) {
       return;
     }
 
@@ -313,14 +328,14 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     
     const runAutoConversation = () => {
       // 检查是否达到消息限制或正在发送
-      if (messageCount >= client.maxMessages || isSending) {
+      if (messageCount >= client.max_messages || isSending) {
         stopAutoMode();
         return;
       }
       
       handleSendMessage().then(() => {
         // 检查是否应该继续（在handleSendMessage中已经处理了停止逻辑）
-        if (messageCount < client.maxMessages && !isSending && (isGlobalAutoMode ? client.isActive : isLocalActive)) {
+        if (messageCount < client.max_messages && !isSending && (isGlobalAutoMode ? client.isActive : isLocalActive)) {
           autoModeRef.current = setTimeout(runAutoConversation, 8000);
         }
       });
@@ -337,10 +352,10 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
   };
 
   const startManualAutoMode = () => {
-    if (messageCount >= client.maxMessages) {
+    if (messageCount >= client.max_messages) {
       toast({
         title: `${client.name} 达到消息限制`,
-        description: `已达到最大 ${client.maxMessages} 条消息`,
+        description: `已达到最大 ${client.max_messages} 条消息`,
         variant: "destructive"
       });
       return;
@@ -351,7 +366,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     
     const runManualAutoConversation = () => {
       // 检查是否达到消息限制或正在发送
-      if (messageCount >= client.maxMessages || isSending) {
+      if (messageCount >= client.max_messages || isSending) {
         setIsLocalActive(false);
         onToggleActive();
         return;
@@ -359,7 +374,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
       
       handleSendMessage().then(() => {
         // 检查是否应该继续（在handleSendMessage中已经处理了停止逻辑）
-        if (messageCount < client.maxMessages && !isSending && isLocalActive) {
+        if (messageCount < client.max_messages && !isSending && isLocalActive) {
           autoModeRef.current = setTimeout(runManualAutoConversation, 6000);
         }
       });
@@ -404,7 +419,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
   };
 
   const getStatusColor = () => {
-    if (messageCount >= client.maxMessages) {
+    if (messageCount >= client.max_messages) {
       return 'bg-red-500'; // 已达到上限显示红色
     }
     if (isLocalActive || (isGlobalAutoMode && client.isActive)) {
@@ -413,7 +428,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     return 'bg-gray-500';
   };
 
-  const isAtLimit = messageCount >= client.maxMessages;
+  const isAtLimit = messageCount >= client.max_messages;
 
   return (
     <Card className="bg-white/10 backdrop-blur-md border-white/20 h-[500px] flex flex-col">
@@ -459,7 +474,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
           </div>
         </div>
         <div className="text-xs text-gray-300">
-          {client.category} | {messageCount}/{client.maxMessages} 消息 | {client.testCases.length} 测试用例
+          {client.category} | {messageCount}/{client.max_messages} 消息 | {client.testCases.length} 测试用例
           {isSending && ' | 发送中...'}
           {isAtLimit && ' | 已达上限'}
         </div>
