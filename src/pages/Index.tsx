@@ -29,6 +29,8 @@ interface Conversation {
 }
 
 const Index = () => {
+  console.log('Index component loaded');
+  
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -40,11 +42,13 @@ const Index = () => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
 
   useEffect(() => {
+    console.log('Index useEffect - loading conversations');
     loadConversations();
   }, []);
 
   const loadConversations = async () => {
     try {
+      console.log('Loading conversations...');
       const { data, error } = await supabase
         .from('conversations')
         .select('*')
@@ -53,23 +57,36 @@ const Index = () => {
         .order('created_at', { ascending: false })
         .limit(20);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading conversations:', error);
+        return;
+      }
       
-      console.log('加载的对话记录:', data);
+      console.log('Loaded conversations:', data);
       setConversations(data || []);
     } catch (error) {
-      console.error('加载对话记录失败:', error);
+      console.error('Failed to load conversations:', error);
     }
   };
 
   const saveApiKey = () => {
-    localStorage.setItem('deepseek-api-key', apiKey);
-    setShowSettings(false);
+    try {
+      localStorage.setItem('deepseek-api-key', apiKey);
+      setShowSettings(false);
+      console.log('API key saved');
+    } catch (error) {
+      console.error('Failed to save API key:', error);
+    }
   };
 
   const handleSystemPromptChange = (newPrompt: string) => {
-    setSystemPrompt(newPrompt);
-    localStorage.setItem('system-prompt', newPrompt);
+    try {
+      setSystemPrompt(newPrompt);
+      localStorage.setItem('system-prompt', newPrompt);
+      console.log('System prompt updated');
+    } catch (error) {
+      console.error('Failed to update system prompt:', error);
+    }
   };
 
   const callDeepSeekAPI = async (message: string): Promise<string> => {
@@ -78,6 +95,7 @@ const Index = () => {
     }
 
     try {
+      console.log('Calling DeepSeek API...');
       const response = await fetch('https://api.deepseek.com/chat/completions', {
         method: 'POST',
         headers: {
@@ -110,9 +128,10 @@ const Index = () => {
       }
 
       const data = await response.json();
+      console.log('DeepSeek API response received');
       return data.choices[0]?.message?.content || '抱歉，我暂时无法回复。';
     } catch (error) {
-      console.error('DeepSeek API调用错误:', error);
+      console.error('DeepSeek API error:', error);
       throw error;
     }
   };
@@ -120,6 +139,8 @@ const Index = () => {
   const sendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
 
+    console.log('Sending message:', currentMessage);
+    
     const userMessage: Message = {
       id: Date.now().toString(),
       content: currentMessage,
@@ -144,23 +165,24 @@ const Index = () => {
 
       setMessages(prev => [...prev, serviceMessage]);
 
+      // 保存对话记录时确保使用正确的test_mode值
       const { error } = await supabase.from('conversations').insert({
         customer_message: messageToSend,
         service_response: response,
-        test_mode: 'manual',
+        test_mode: 'manual', // 确保使用正确的值
         chat_type: 'single',
         ai_client_id: null
       });
 
       if (error) {
-        console.error('保存对话记录失败:', error);
+        console.error('Failed to save conversation:', error);
       } else {
-        console.log('对话记录已保存');
+        console.log('Conversation saved successfully');
         loadConversations();
       }
 
     } catch (error) {
-      console.error('发送消息失败:', error);
+      console.error('Failed to send message:', error);
       toast({
         title: "发送失败",
         description: "消息发送失败，请检查API密钥和网络连接",
@@ -173,6 +195,7 @@ const Index = () => {
 
   const clearChat = () => {
     setMessages([]);
+    console.log('Chat cleared');
   };
 
   return (
