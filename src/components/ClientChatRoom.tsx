@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -235,7 +234,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
         service_response: serviceResponse,
         test_case_id: testCaseId || null,
         chat_type: 'multi_client',
-        test_mode: 'multi_client'
+        test_mode: 'automated'
       });
 
       const { data, error } = await supabase.from('conversations').insert({
@@ -244,7 +243,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
         service_response: serviceResponse,
         test_case_id: testCaseId || null,
         chat_type: 'multi_client',
-        test_mode: 'multi_client'
+        test_mode: 'automated'
       });
 
       if (error) {
