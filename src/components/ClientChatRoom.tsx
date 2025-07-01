@@ -273,6 +273,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
   const handleSendMessage = async () => {
     // 检查是否已达到客户消息限制
     if (customerMessageCount >= client.max_messages) {
+      console.log(`${client.name} 已达到消息限制 ${customerMessageCount}/${client.max_messages}，停止发送`);
       toast({
         title: `${client.name} 达到消息限制`,
         description: `客户已发送 ${client.max_messages} 条消息，达到上限`,
@@ -289,7 +290,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
 
     // 防止重复发送
     if (isSending) {
-      console.log('正在发送消息，跳过重复请求');
+      console.log(`${client.name} 正在发送消息，跳过重复请求`);
       return;
     }
 
@@ -301,20 +302,13 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
       const customerMessage = await generateCustomerMessage();
       addMessage(customerMessage, 'customer');
       
-      // 立即检查是否达到限制
-      const newCount = customerMessageCount + 1;
-      if (newCount >= client.max_messages) {
-        console.log(`${client.name} 达到消息限制，停止发送`);
-        stopAutoMode();
-        
-        if (isGlobalAutoMode) {
-          onToggleActive();
-        }
-        
-        toast({
-          title: `${client.name} 已完成`,
-          description: `客户已发送 ${client.max_messages} 条消息，自动停止`,
-        });
+      // 使用即将更新的计数值来检查限制
+      const newCustomerCount = customerMessageCount + 1;
+      console.log(`${client.name} 发送客户消息后计数: ${newCustomerCount}/${client.max_messages}`);
+      
+      // 检查是否达到限制（在AI回复之前就检查）
+      if (newCustomerCount >= client.max_messages) {
+        console.log(`${client.name} 达到消息限制，将在AI回复后停止`);
       }
       
       // 等待AI客服回复
@@ -325,9 +319,24 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
           
           // 保存对话记录到数据库
           await saveConversationToDatabase(customerMessage, serviceReply);
+          
+          // 在AI回复后再次检查是否达到限制
+          if (newCustomerCount >= client.max_messages) {
+            console.log(`${client.name} 完成最后一轮对话，停止自动模式`);
+            stopAutoMode();
+            
+            if (isGlobalAutoMode) {
+              onToggleActive();
+            }
+            
+            toast({
+              title: `${client.name} 已完成`,
+              description: `客户已发送 ${client.max_messages} 条消息，自动停止`,
+            });
+          }
             
         } catch (error) {
-          console.error('AI客服回复失败:', error);
+          console.error(`${client.name} AI客服回复失败:`, error);
           // 即使AI回复失败，也要保存客户消息
           await saveConversationToDatabase(customerMessage, '系统错误：AI客服暂时无法回复');
         } finally {
@@ -336,14 +345,14 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
       }, 1500);
       
     } catch (error) {
-      console.error('发送消息失败:', error);
+      console.error(`${client.name} 发送消息失败:`, error);
       setIsSending(false);
     }
   };
 
   const startAutoMode = () => {
     if (customerMessageCount >= client.max_messages) {
-      console.log(`${client.name} 已达到消息限制，无法启动自动模式`);
+      console.log(`${client.name} 已达到消息限制 ${customerMessageCount}/${client.max_messages}，无法启动自动模式`);
       return;
     }
 
@@ -351,19 +360,39 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     console.log(`${client.name} 启动自动模式`);
     
     const runAutoConversation = () => {
-      if (customerMessageCount >= client.max_messages || isSending) {
-        console.log(`${client.name} 停止自动模式 - 消息限制: ${customerMessageCount >= client.max_messages}, 发送中: ${isSending}`);
+      // 检查是否应该继续
+      if (customerMessageCount >= client.max_messages) {
+        console.log(`${client.name} 达到消息限制，停止自动模式`);
         stopAutoMode();
         return;
       }
       
+      if (isSending) {
+        console.log(`${client.name} 正在发送消息，等待下一轮`);
+        // 如果正在发送，延迟重试
+        autoModeRef.current = setTimeout(runAutoConversation, 2000);
+        return;
+      }
+      
+      if (!(isGlobalAutoMode ? client.isActive : isLocalActive)) {
+        console.log(`${client.name} 客户未激活，停止自动模式`);
+        return;
+      }
+      
       handleSendMessage().then(() => {
-        if (customerMessageCount < client.max_messages && !isSending && (isGlobalAutoMode ? client.isActive : isLocalActive)) {
+        // 只有在未达到限制且客户仍激活时才继续
+        if (customerMessageCount < client.max_messages && 
+            !isSending && 
+            (isGlobalAutoMode ? client.isActive : isLocalActive)) {
           autoModeRef.current = setTimeout(runAutoConversation, 10000);
         }
+      }).catch((error) => {
+        console.error(`${client.name} 自动发送消息失败:`, error);
+        setIsSending(false);
       });
     };
     
+    // 立即开始第一轮对话
     runAutoConversation();
   };
 
@@ -371,6 +400,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     setIsLocalActive(false);
     if (autoModeRef.current) {
       clearTimeout(autoModeRef.current);
+      autoModeRef.current = undefined;
     }
     console.log(`${client.name} 停止自动模式`);
   };
@@ -389,9 +419,21 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     onToggleActive();
     
     const runManualAutoConversation = () => {
-      if (customerMessageCount >= client.max_messages || isSending) {
+      if (customerMessageCount >= client.max_messages) {
+        console.log(`${client.name} 达到消息限制，停止手动自动模式`);
         setIsLocalActive(false);
         onToggleActive();
+        return;
+      }
+      
+      if (isSending) {
+        console.log(`${client.name} 正在发送消息，等待下一轮`);
+        autoModeRef.current = setTimeout(runManualAutoConversation, 2000);
+        return;
+      }
+      
+      if (!isLocalActive) {
+        console.log(`${client.name} 客户未激活，停止手动自动模式`);
         return;
       }
       
@@ -399,6 +441,9 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
         if (customerMessageCount < client.max_messages && !isSending && isLocalActive) {
           autoModeRef.current = setTimeout(runManualAutoConversation, 8000);
         }
+      }).catch((error) => {
+        console.error(`${client.name} 手动自动发送消息失败:`, error);
+        setIsSending(false);
       });
     };
     
@@ -410,7 +455,9 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     onToggleActive();
     if (autoModeRef.current) {
       clearTimeout(autoModeRef.current);
+      autoModeRef.current = undefined;
     }
+    console.log(`${client.name} 停止手动自动模式`);
   };
 
   const clearMessages = () => {
