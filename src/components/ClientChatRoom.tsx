@@ -442,7 +442,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
 
   return (
     <>
-      <Card className={`backdrop-blur-md border h-[500px] flex flex-col transition-all duration-300 ${
+      <Card className={`backdrop-blur-md border h-[600px] flex flex-col transition-all duration-300 ${
         isAtLimit 
           ? 'bg-red-900/20 border-red-500/50 shadow-lg shadow-red-500/20' 
           : 'bg-white/10 border-white/20'
@@ -510,12 +510,12 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
           </div>
         </CardHeader>
         
-        <CardContent className="flex-1 flex flex-col p-2 min-h-0">
-          <ScrollArea className="flex-1 mb-2">
-            <div className="space-y-2 pr-2">
+        <CardContent className="flex-1 flex flex-col p-3 min-h-0">
+          <ScrollArea className="flex-1 mb-3">
+            <div className="space-y-3 pr-2">
               {messages.length === 0 ? (
-                <div className="text-center text-gray-400 text-xs mt-8">
-                  <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <div className="text-center text-gray-400 text-sm mt-12">
+                  <User className="h-10 w-10 mx-auto mb-3 opacity-50" />
                   <p>等待对话开始...</p>
                 </div>
               ) : (
@@ -524,25 +524,25 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
                     key={message.id}
                     className={`flex ${message.sender === 'service' ? 'justify-start' : 'justify-end'}`}
                   >
-                    <div className={`flex items-start space-x-1 max-w-[80%] ${message.sender === 'customer' ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    <div className={`flex items-start space-x-2 max-w-[85%] ${message.sender === 'customer' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
                         message.sender === 'service' 
                           ? 'bg-blue-500' 
                           : 'bg-orange-500'
                       }`}>
                         {message.sender === 'service' ? (
-                          <Bot className="h-3 w-3 text-white" />
+                          <Bot className="h-3.5 w-3.5 text-white" />
                         ) : (
-                          <User className="h-3 w-3 text-white" />
+                          <User className="h-3.5 w-3.5 text-white" />
                         )}
                       </div>
                       
-                      <div className={`rounded-lg p-2 ${
+                      <div className={`rounded-lg p-3 ${
                         message.sender === 'service'
                           ? 'bg-blue-600/80 text-white'
                           : 'bg-white/20 text-white'
                       }`}>
-                        <p className="text-xs leading-relaxed">{message.content}</p>
+                        <p className="text-sm leading-relaxed">{message.content}</p>
                         <p className="text-xs opacity-70 mt-1">
                           {formatTime(message.timestamp)}
                         </p>
@@ -560,7 +560,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
               onClick={handleSendMessage}
               disabled={!apiKey || isAtLimit || isSending}
               size="sm"
-              className={`flex-1 text-white text-xs disabled:opacity-50 transition-all duration-300 ${
+              className={`flex-1 text-white text-sm disabled:opacity-50 transition-all duration-300 ${
                 isAtLimit 
                   ? 'bg-red-600/50 cursor-not-allowed' 
                   : 'bg-orange-600 hover:bg-orange-700'
@@ -580,7 +580,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
                     : 'bg-green-600 hover:bg-green-700 text-white'
                 }`}
               >
-                <Play className="h-3 w-3" />
+                <Play className="h-4 w-4" />
               </Button>
             ) : (
               <Button
@@ -588,7 +588,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
                 size="sm"
                 className="bg-red-600 hover:bg-red-700 text-white"
               >
-                <Pause className="h-3 w-3" />
+                <Pause className="h-4 w-4" />
               </Button>
             )}
           </div>

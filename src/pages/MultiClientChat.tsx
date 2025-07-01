@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -413,9 +414,9 @@ const MultiClientChat = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      <div className="container mx-auto h-screen flex flex-col">
+      <div className="w-full h-screen flex flex-col">
         {/* Header */}
-        <div className="bg-white/10 backdrop-blur-md border-b border-white/20 p-4">
+        <div className="bg-white/10 backdrop-blur-md border-b border-white/20 p-4 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <Link to="/">
@@ -485,7 +486,7 @@ const MultiClientChat = () => {
         </div>
 
         {/* 状态栏 */}
-        <div className="bg-white/5 border-b border-white/10 p-2">
+        <div className="bg-white/5 border-b border-white/10 p-2 flex-shrink-0">
           <div className="flex items-center justify-between text-sm text-gray-300">
             <span>活跃客户: {clients.filter(c => c.isActive).length}/{clients.length}</span>
             <span>可用类别: {categories.length}</span>
@@ -497,7 +498,7 @@ const MultiClientChat = () => {
           </div>
         </div>
 
-        {/* 客户对话区域 */}
+        {/* 客户对话区域 - 优化布局 */}
         <div className="flex-1 overflow-hidden">
           {isLoading ? (
             <div className="h-full flex items-center justify-center">
@@ -533,20 +534,21 @@ const MultiClientChat = () => {
               </Card>
             </div>
           ) : (
-            <div className="h-full p-4">
+            <div className="h-full px-2 py-3">
               <div className="h-full overflow-y-auto">
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-3 max-w-full">
                   {clients.map(client => (
-                    <ClientChatRoom
-                      key={client.id}
-                      client={client}
-                      onEdit={() => editClient(client)}
-                      onDelete={() => deleteClient(client.id)}
-                      onToggleActive={() => toggleClientActive(client.id)}
-                      onMessageCountChange={updateClientMessageCount}
-                      apiKey={apiKey}
-                      isGlobalAutoMode={isGlobalAutoMode}
-                    />
+                    <div key={client.id} className="w-full">
+                      <ClientChatRoom
+                        client={client}
+                        onEdit={() => editClient(client)}
+                        onDelete={() => deleteClient(client.id)}
+                        onToggleActive={() => toggleClientActive(client.id)}
+                        onMessageCountChange={updateClientMessageCount}
+                        apiKey={apiKey}
+                        isGlobalAutoMode={isGlobalAutoMode}
+                      />
+                    </div>
                   ))}
                 </div>
               </div>
