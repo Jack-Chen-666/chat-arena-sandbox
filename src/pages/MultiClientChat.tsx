@@ -72,6 +72,21 @@ const MultiClientChat = () => {
     initializeData();
   }, []);
 
+  useEffect(() => {
+    // 当所有AI客户都完成任务后，自动停止全局模式
+    if (isGlobalAutoMode && clients.length > 0) {
+      const allClientsFinished = clients.every(client => !client.isActive);
+      if (allClientsFinished) {
+        console.log("所有AI客户已完成测试，自动停止全局模式。");
+        setIsGlobalAutoMode(false);
+        toast({
+          title: "测试完成",
+          description: "所有AI客户均已达到消息上限。",
+        });
+      }
+    }
+  }, [clients, isGlobalAutoMode]);
+
   const loadTestCases = async () => {
     try {
       const { data, error } = await supabase
@@ -137,8 +152,6 @@ const MultiClientChat = () => {
       console.error('加载AI客户失败:', error);
     }
   };
-
-
 
   const createNewClient = () => {
     setEditingClient(null);
