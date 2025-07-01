@@ -40,10 +40,18 @@ const CoolNotification: React.FC<CoolNotificationProps> = ({
     }, 300);
   };
 
+  // 点击背景或卡片时立即关闭
+  const handleClick = () => {
+    handleClose();
+  };
+
   if (!shouldRender) return null;
 
   return (
-    <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center cursor-pointer"
+      onClick={handleClick}
+    >
       {/* 背景遮罩 */}
       <div 
         className={`absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity duration-300 ${
@@ -53,17 +61,18 @@ const CoolNotification: React.FC<CoolNotificationProps> = ({
       
       {/* 通知卡片 */}
       <div 
-        className={`relative pointer-events-auto transform transition-all duration-300 ease-out ${
+        className={`relative transform transition-all duration-300 ease-out ${
           isAnimating 
             ? 'translate-y-0 scale-100 opacity-100' 
             : 'translate-y-8 scale-95 opacity-0'
         }`}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="bg-gradient-to-br from-orange-500 via-red-500 to-pink-600 p-0.5 rounded-2xl shadow-2xl">
           <div className="bg-slate-900/95 backdrop-blur-md rounded-2xl p-6 min-w-[350px] max-w-md">
             {/* 关闭按钮 */}
             <Button
-              onClick={handleClose}
+              onClick={handleClick}
               variant="ghost"
               size="sm"
               className="absolute top-2 right-2 text-white/70 hover:text-white hover:bg-white/10 h-8 w-8 p-0"

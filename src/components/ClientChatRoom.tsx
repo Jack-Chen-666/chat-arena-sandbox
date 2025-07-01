@@ -442,12 +442,27 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
 
   return (
     <>
-      <Card className="bg-white/10 backdrop-blur-md border-white/20 h-[500px] flex flex-col">
+      <Card className={`backdrop-blur-md border h-[500px] flex flex-col transition-all duration-300 ${
+        isAtLimit 
+          ? 'bg-red-900/20 border-red-500/50 shadow-lg shadow-red-500/20' 
+          : 'bg-white/10 border-white/20'
+      }`}>
         <CardHeader className="pb-2 flex-shrink-0">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-white text-sm flex items-center">
-              <div className={`w-2 h-2 rounded-full mr-2 ${getStatusColor()}`} />
+            <CardTitle className={`text-sm flex items-center transition-colors duration-300 ${
+              isAtLimit ? 'text-red-300' : 'text-white'
+            }`}>
+              <div className={`w-2 h-2 rounded-full mr-2 transition-all duration-300 ${
+                isAtLimit 
+                  ? 'bg-red-500 animate-pulse' 
+                  : getStatusColor()
+              }`} />
               {client.name}
+              {isAtLimit && (
+                <span className="ml-2 px-2 py-0.5 text-xs bg-red-500/80 text-white rounded-full animate-pulse">
+                  已达上限
+                </span>
+              )}
             </CardTitle>
             <div className="flex space-x-1">
               <Button
@@ -484,10 +499,14 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
               </Button>
             </div>
           </div>
-          <div className="text-xs text-gray-300">
+          <div className={`text-xs transition-colors duration-300 ${
+            isAtLimit ? 'text-red-200' : 'text-gray-300'
+          }`}>
             {client.category} | 客户消息: {customerMessageCount}/{client.max_messages} | {client.testCases.length} 测试用例
             {isSending && ' | 发送中...'}
-            {isAtLimit && ' | 已达上限'}
+            {isAtLimit && (
+              <span className="text-red-300 font-medium animate-pulse"> | 测试完成</span>
+            )}
           </div>
         </CardHeader>
         
@@ -541,9 +560,13 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
               onClick={handleSendMessage}
               disabled={!apiKey || isAtLimit || isSending}
               size="sm"
-              className="flex-1 bg-orange-600 hover:bg-orange-700 text-white text-xs disabled:opacity-50"
+              className={`flex-1 text-white text-xs disabled:opacity-50 transition-all duration-300 ${
+                isAtLimit 
+                  ? 'bg-red-600/50 cursor-not-allowed' 
+                  : 'bg-orange-600 hover:bg-orange-700'
+              }`}
             >
-              {isSending ? '发送中...' : '手动发送'}
+              {isSending ? '发送中...' : isAtLimit ? '已完成' : '手动发送'}
             </Button>
             
             {!isLocalActive ? (
@@ -551,7 +574,11 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
                 onClick={startManualAutoMode}
                 disabled={!apiKey || isAtLimit || isSending}
                 size="sm"
-                className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                className={`disabled:opacity-50 transition-all duration-300 ${
+                  isAtLimit 
+                    ? 'bg-red-600/50 text-white cursor-not-allowed' 
+                    : 'bg-green-600 hover:bg-green-700 text-white'
+                }`}
               >
                 <Play className="h-3 w-3" />
               </Button>

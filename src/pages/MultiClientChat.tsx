@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import ClientChatRoom from '@/components/ClientChatRoom';
 import ClientConfigModal from '@/components/ClientConfigModal';
 import ExcelUploader from '@/components/ExcelUploader';
+import GlobalLimitNotification from '@/components/GlobalLimitNotification';
 
 interface TestCase {
   id: string;
@@ -39,6 +40,7 @@ const MultiClientChat = () => {
   const [clientMessageCounts, setClientMessageCounts] = useState<{[key: string]: number}>({});
   const [apiKey] = useState(() => localStorage.getItem('deepseek-api-key') || '');
   const [isLoading, setIsLoading] = useState(true);
+  const [showGlobalLimitNotification, setShowGlobalLimitNotification] = useState(false);
 
   useEffect(() => {
     const initializeData = async () => {
@@ -75,17 +77,22 @@ const MultiClientChat = () => {
   useEffect(() => {
     // 当所有AI客户都完成任务后，自动停止全局模式
     if (isGlobalAutoMode && clients.length > 0) {
-      const allClientsFinished = clients.every(client => !client.isActive);
+      const allClientsFinished = clients.every(client => {
+        const messageCount = clientMessageCounts[client.id] || 0;
+        return messageCount >= client.max_messages;
+      });
+      
       if (allClientsFinished) {
         console.log("所有AI客户已完成测试，自动停止全局模式。");
         setIsGlobalAutoMode(false);
+        setShowGlobalLimitNotification(true);
         toast({
           title: "测试完成",
           description: "所有AI客户均已达到消息上限。",
         });
       }
     }
-  }, [clients, isGlobalAutoMode]);
+  }, [clients, isGlobalAutoMode, clientMessageCounts]);
 
   const loadTestCases = async () => {
     try {
@@ -398,6 +405,12 @@ const MultiClientChat = () => {
     });
   };
 
+  // 检查是否所有客户都已达到上限
+  const allClientsAtLimit = clients.length > 0 && clients.every(client => {
+    const messageCount = clientMessageCounts[client.id] || 0;
+    return messageCount >= client.max_messages;
+  });
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <div className="container mx-auto h-screen flex flex-col">
@@ -448,11 +461,15 @@ const MultiClientChat = () => {
               {!isGlobalAutoMode ? (
                 <Button
                   onClick={startGlobalAutoMode}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  className={`text-white transition-all duration-300 ${
+                    allClientsAtLimit 
+                      ? 'bg-green-600 hover:bg-green-700' 
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
                   disabled={!apiKey || clients.length === 0}
                 >
                   <Play className="h-4 w-4 mr-2" />
-                  全局自动
+                  {allClientsAtLimit ? '全局自动' : '全局自动'}
                 </Button>
               ) : (
                 <Button
@@ -582,6 +599,12 @@ const MultiClientChat = () => {
             </div>
           </div>
         )}
+
+        {/* 全局完成通知 */}
+        <GlobalLimitNotification
+          isVisible={showGlobalLimitNotification}
+          onClose={() => setShowGlobalLimitNotification(false)}
+        />
       </div>
     </div>
   );
