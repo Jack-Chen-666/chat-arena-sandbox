@@ -486,7 +486,18 @@ const MultiClientChat = () => {
             <div className="h-full flex items-center justify-center">
               <Card className="bg-white/10 backdrop-blur-md border-white/20 p-8">
                 <CardContent className="text-center">
-                  <h3 className="text-lg font-semibold text-white mb-2">加载中...</h3>
+                  <div className="flex items-center justify-center space-x-3 mb-4">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                    <div className="animate-pulse">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                        <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                      </div>
+                    </div>
+                  </div>
+                  <h3 className="text-lg font-semibold text-white mb-2">正在加载AI客户数据</h3>
+                  <p className="text-sm text-gray-300">请稍候，正在获取测试用例和客户配置...</p>
                 </CardContent>
               </Card>
             </div>

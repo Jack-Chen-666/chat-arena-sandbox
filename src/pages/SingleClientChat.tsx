@@ -44,7 +44,7 @@ const SingleClientChat = () => {
   const [isActive, setIsActive] = useState(false);
   const [usedTestCases, setUsedTestCases] = useState<Set<string>>(new Set());
   const [apiKey] = useState(() => localStorage.getItem('deepseek-api-key') || '');
-  const [systemPrompt] = useState(() => localStorage.getItem('system-prompt') || '');
+  const [systemPrompt] = useState(() => localStorage.getItem('system-prompt') || '你是一个专业的AI客服助手，请礼貌、耐心地回答用户的问题。');
 
   const autoModeRef = useRef<NodeJS.Timeout>();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -223,7 +223,18 @@ const SingleClientChat = () => {
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
         <Card className="bg-white/10 backdrop-blur-md border-white/20 p-8">
           <CardContent className="text-center">
-            <p className="text-white">客户信息加载中...</p>
+            <div className="flex items-center justify-center space-x-3 mb-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+              <div className="animate-pulse">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                  <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                </div>
+              </div>
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">正在加载客户信息</h3>
+            <p className="text-sm text-gray-300">请稍候，正在获取客户配置...</p>
           </CardContent>
         </Card>
       </div>
