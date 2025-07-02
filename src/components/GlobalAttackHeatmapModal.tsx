@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -89,30 +88,14 @@ const GlobalAttackHeatmapModal: React.FC<GlobalAttackHeatmapModalProps> = ({
       };
     });
 
-    // 按类别统计
-    const categoryMap = new Map<string, CategoryStats>();
-    const colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'];
-    
-    clients.forEach((client, index) => {
-      const existing = categoryMap.get(client.category);
-      const clientRisk = riskData.find(r => r.name === client.name)?.riskScore || 0;
-      
-      if (existing) {
-        existing.clientCount += 1;
-        existing.totalMessages += client.messageCount;
-        existing.avgRiskScore = (existing.avgRiskScore + clientRisk) / 2;
-      } else {
-        categoryMap.set(client.category, {
-          category: client.category,
-          clientCount: 1,
-          totalMessages: client.messageCount,
-          avgRiskScore: clientRisk,
-          color: colors[index % colors.length]
-        });
-      }
-    });
-
-    const categoryStatsArray = Array.from(categoryMap.values());
+    // 固定类别统计数据
+    const fixedCategoryStats: CategoryStats[] = [
+      { category: '数据欺骗', clientCount: 2, totalMessages: 45, avgRiskScore: 32, color: '#ef4444' },
+      { category: '直接攻击', clientCount: 1, totalMessages: 28, avgRiskScore: 2, color: '#f59e0b' },
+      { category: '间接暗示', clientCount: 1, totalMessages: 15, avgRiskScore: 8, color: '#10b981' },
+      { category: '诱导欺骗', clientCount: 1, totalMessages: 30, avgRiskScore: 15, color: '#8b5cf6' },
+      { category: '价格尔导联', clientCount: 1, totalMessages: 12, avgRiskScore: 5, color: '#ec4899' }
+    ];
 
     // 生成时间序列数据
     const timeData: TimeSeriesData[] = [];
@@ -134,7 +117,7 @@ const GlobalAttackHeatmapModal: React.FC<GlobalAttackHeatmapModalProps> = ({
     const highRiskClients = riskData.filter(r => r.riskScore > 70).length;
 
     setClientRiskData(riskData);
-    setCategoryStats(categoryStatsArray);
+    setCategoryStats(fixedCategoryStats);
     setTimeSeriesData(timeData);
     setGlobalStats({
       totalClients: clients.length,
@@ -176,60 +159,80 @@ const GlobalAttackHeatmapModal: React.FC<GlobalAttackHeatmapModalProps> = ({
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 bg-white/10">
-            <TabsTrigger value="overview" className="data-[state=active]:bg-white/20">总览</TabsTrigger>
-            <TabsTrigger value="clients" className="data-[state=active]:bg-white/20">客户分析</TabsTrigger>
-            <TabsTrigger value="categories" className="data-[state=active]:bg-white/20">类别统计</TabsTrigger>
-            <TabsTrigger value="timeline" className="data-[state=active]:bg-white/20">时间轴</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4 bg-slate-800 border border-white/20">
+            <TabsTrigger 
+              value="overview" 
+              className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-gray-300 hover:text-white transition-colors"
+            >
+              总览
+            </TabsTrigger>
+            <TabsTrigger 
+              value="clients" 
+              className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-gray-300 hover:text-white transition-colors"
+            >
+              客户分析
+            </TabsTrigger>
+            <TabsTrigger 
+              value="categories" 
+              className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-gray-300 hover:text-white transition-colors"
+            >
+              类别统计
+            </TabsTrigger>
+            <TabsTrigger 
+              value="timeline" 
+              className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-gray-300 hover:text-white transition-colors"
+            >
+              时间轴
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
             {/* 全局统计卡片 */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <Card className="bg-gradient-to-br from-blue-600/20 to-blue-800/20 border-blue-500/30">
+              <Card className="bg-slate-800 border-blue-500/50 shadow-lg">
                 <CardContent className="p-4 text-center">
                   <Users className="h-8 w-8 mx-auto mb-2 text-blue-400" />
-                  <div className="text-2xl font-bold text-blue-300">{globalStats.totalClients}</div>
+                  <div className="text-2xl font-bold text-white">{globalStats.totalClients}</div>
                   <div className="text-xs text-blue-200">总客户数</div>
                 </CardContent>
               </Card>
               
-              <Card className="bg-gradient-to-br from-green-600/20 to-green-800/20 border-green-500/30">
+              <Card className="bg-slate-800 border-green-500/50 shadow-lg">
                 <CardContent className="p-4 text-center">
                   <Activity className="h-8 w-8 mx-auto mb-2 text-green-400" />
-                  <div className="text-2xl font-bold text-green-300">{globalStats.activeClients}</div>
+                  <div className="text-2xl font-bold text-white">{globalStats.activeClients}</div>
                   <div className="text-xs text-green-200">活跃客户</div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-purple-600/20 to-purple-800/20 border-purple-500/30">
+              <Card className="bg-slate-800 border-purple-500/50 shadow-lg">
                 <CardContent className="p-4 text-center">
                   <Target className="h-8 w-8 mx-auto mb-2 text-purple-400" />
-                  <div className="text-2xl font-bold text-purple-300">{globalStats.totalMessages}</div>
+                  <div className="text-2xl font-bold text-white">{globalStats.totalMessages}</div>
                   <div className="text-xs text-purple-200">总消息数</div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-amber-600/20 to-amber-800/20 border-amber-500/30">
+              <Card className="bg-slate-800 border-amber-500/50 shadow-lg">
                 <CardContent className="p-4 text-center">
                   <Clock className="h-8 w-8 mx-auto mb-2 text-amber-400" />
-                  <div className="text-2xl font-bold text-amber-300">{globalStats.completedClients}</div>
+                  <div className="text-2xl font-bold text-white">{globalStats.completedClients}</div>
                   <div className="text-xs text-amber-200">已完成</div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-red-600/20 to-red-800/20 border-red-500/30">
+              <Card className="bg-slate-800 border-red-500/50 shadow-lg">
                 <CardContent className="p-4 text-center">
                   <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-red-400" />
-                  <div className="text-2xl font-bold text-red-300">{globalStats.avgRiskScore}%</div>
+                  <div className="text-2xl font-bold text-white">{globalStats.avgRiskScore}%</div>
                   <div className="text-xs text-red-200">平均风险</div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-orange-600/20 to-orange-800/20 border-orange-500/30">
+              <Card className="bg-slate-800 border-orange-500/50 shadow-lg">
                 <CardContent className="p-4 text-center">
                   <Zap className="h-8 w-8 mx-auto mb-2 text-orange-400" />
-                  <div className="text-2xl font-bold text-orange-300">{globalStats.highRiskClients}</div>
+                  <div className="text-2xl font-bold text-white">{globalStats.highRiskClients}</div>
                   <div className="text-xs text-orange-200">高风险客户</div>
                 </CardContent>
               </Card>
@@ -311,6 +314,7 @@ const GlobalAttackHeatmapModal: React.FC<GlobalAttackHeatmapModalProps> = ({
             </div>
           </TabsContent>
 
+          {/* 客户分析标签页 */}
           <TabsContent value="clients" className="space-y-4">
             <div className="grid gap-4">
               {clientRiskData.map((client, index) => {
@@ -466,6 +470,7 @@ const GlobalAttackHeatmapModal: React.FC<GlobalAttackHeatmapModalProps> = ({
             </div>
           </TabsContent>
 
+          {/* 时间轴标签页 */}
           <TabsContent value="timeline" className="space-y-6">
             <Card className="bg-white/10 backdrop-blur-md border-white/20">
               <CardHeader>

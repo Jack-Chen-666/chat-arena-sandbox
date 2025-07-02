@@ -1,22 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Settings, Play, Pause, RotateCcw, ArrowLeft, TrendingUp } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
-import { Link } from 'react-router-dom';
-import ClientChatRoom from '@/components/ClientChatRoom';
-import ClientConfigModal from '@/components/ClientConfigModal';
-import ExcelUploader from '@/components/ExcelUploader';
-import GlobalLimitNotification from '@/components/GlobalLimitNotification';
+import { Input } from '@/components/ui/input';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Textarea } from '@/components/ui/textarea';
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Switch } from "@/components/ui/switch"
+import { Slider } from "@/components/ui/slider"
+import { useToast } from "@/hooks/use-toast"
+import { Plus, Users, MessageSquare,化, TrendingUp, Upload } from "lucide-react";
+import { v4 as uuidv4 } from 'uuid';
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
+import AttackHeatmapModal from '@/components/AttackHeatmapModal';
 import GlobalAttackHeatmapModal from '@/components/GlobalAttackHeatmapModal';
+import ExcelUploader from '@/components/ExcelUploader';
 
-interface TestCase {
+interface ChatMessage {
   id: string;
-  attack_type: string;
-  category: string;
-  test_prompt: string;
-  expected_result: string;
+  content: string;
+  sender: 'customer' | 'service';
+  timestamp: Date;
 }
 
 interface AIClient {
@@ -24,620 +49,362 @@ interface AIClient {
   name: string;
   category: string;
   prompt: string;
-  max_messages: number;
-  use_random_generation: boolean;
+  messageCount: number;
+  maxMessages: number;
   isActive: boolean;
-  testCases: TestCase[];
 }
+
+const formSchema = z.object({
+  name: z.string().min(2, {
+    message: "Client name must be at least 2 characters.",
+  }),
+  category: z.string().min(2, {
+    message: "Category must be at least 2 characters.",
+  }),
+  prompt: z.string().min(10, {
+    message: "Prompt must be at least 10 characters.",
+  }),
+  maxMessages: z.number().min(50, {
+    message: "Max messages must be at least 50.",
+  }).max(2000, {
+    message: "Max messages must be less than 2000.",
+  }),
+})
 
 const MultiClientChat = () => {
   const [clients, setClients] = useState<AIClient[]>([]);
-  const [testCases, setTestCases] = useState<TestCase[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [showConfigModal, setShowConfigModal] = useState(false);
-  const [showExcelUploader, setShowExcelUploader] = useState(false);
-  const [editingClient, setEditingClient] = useState<AIClient | null>(null);
-  const [isGlobalAutoMode, setIsGlobalAutoMode] = useState(false);
-  const [clientMessageCounts, setClientMessageCounts] = useState<{[key: string]: number}>({});
-  const [apiKey] = useState(() => localStorage.getItem('deepseek-api-key') || '');
-  const [isLoading, setIsLoading] = useState(true);
-  const [showGlobalLimitNotification, setShowGlobalLimitNotification] = useState(false);
+  const [messages, setMessages] = useState<{ [clientId: string]: ChatMessage[] }>({});
+  const [input, setInput] = useState<{ [clientId: string]: string }>({});
+  const [isClientModalOpen, setShowClientModal] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState<{ [clientId: string]: boolean }>({});
   const [showGlobalHeatmap, setShowGlobalHeatmap] = useState(false);
+  const [showExcelUploader, setShowExcelUploader] = useState(false);
+  const { toast } = useToast()
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: "",
+      category: "",
+      prompt: "",
+      maxMessages: 500,
+    },
+  })
 
   useEffect(() => {
-    const initializeData = async () => {
-      setIsLoading(true);
-      
-      // 先加载测试用例
-      try {
-        const { data, error } = await supabase
-          .from('test_cases')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        
-        const testCasesData = data || [];
-        setTestCases(testCasesData);
-        const uniqueCategories = [...new Set(testCasesData.map(tc => tc.category))];
-        setCategories(uniqueCategories);
-        
-        console.log('加载的测试用例:', testCasesData);
-        
-        // 然后加载AI客户，传入测试用例数据
-        await loadAIClients(testCasesData);
-      } catch (error) {
-        console.error('加载测试用例失败:', error);
-      }
-      
-      setIsLoading(false);
-    };
-    
-    initializeData();
+    // Load clients from local storage on component mount
+    const storedClients = localStorage.getItem('aiClients');
+    if (storedClients) {
+      setClients(JSON.parse(storedClients));
+    }
   }, []);
 
   useEffect(() => {
-    // 当所有AI客户都完成任务后，自动停止全局模式
-    if (isGlobalAutoMode && clients.length > 0) {
-      const allClientsFinished = clients.every(client => {
-        const messageCount = clientMessageCounts[client.id] || 0;
-        return messageCount >= client.max_messages;
-      });
-      
-      if (allClientsFinished) {
-        console.log("所有AI客户已完成测试，自动停止全局模式。");
-        setIsGlobalAutoMode(false);
-        setShowGlobalLimitNotification(true);
-        toast({
-          title: "测试完成",
-          description: "所有AI客户均已达到消息上限。",
-        });
-      }
-    }
-  }, [clients, isGlobalAutoMode, clientMessageCounts]);
+    // Save clients to local storage whenever the clients state changes
+    localStorage.setItem('aiClients', JSON.stringify(clients));
+  }, [clients]);
 
-  const loadTestCases = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('test_cases')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      
-      const testCasesData = data || [];
-      setTestCases(testCasesData);
-      const uniqueCategories = [...new Set(testCasesData.map(tc => tc.category))];
-      setCategories(uniqueCategories);
-      
-      console.log('加载的测试用例:', testCasesData);
-      
-      // 重新加载客户以更新测试用例
-      await loadAIClients(testCasesData);
-    } catch (error) {
-      console.error('加载测试用例失败:', error);
-    }
+  const addClient = (values: z.infer<typeof formSchema>) => {
+    const newClient: AIClient = {
+      id: uuidv4(),
+      name: values.name,
+      category: values.category,
+      prompt: values.prompt,
+      messageCount: 0,
+      maxMessages: values.maxMessages,
+      isActive: false,
+    };
+    setClients([...clients, newClient]);
+    setShowClientModal(false);
+    toast({
+      title: "添加成功",
+      description: `${values.name} AI 客户已成功添加`,
+    })
   };
 
-  const loadAIClients = async (currentTestCases?: TestCase[]) => {
-    try {
-      const { data: clientsData, error: clientsError } = await supabase
-        .from('ai_clients')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (clientsError) throw clientsError;
-
-      if (clientsData && clientsData.length > 0) {
-        const testCasesToUse = currentTestCases || testCases;
-        const clientsWithTestCases = await Promise.all(
-          clientsData.map(async (client) => {
-            const categoryTestCases = testCasesToUse.filter(tc => tc.category === client.category);
-            return {
-              id: client.id,
-              name: client.name,
-              category: client.category,
-              prompt: client.prompt,
-              max_messages: client.max_messages,
-              use_random_generation: client.use_random_generation,
-              isActive: false,
-              testCases: categoryTestCases
-            };
-          })
-        );
-
-        setClients(clientsWithTestCases);
-        
-        // 初始化客户消息计数（只统计客户发送的消息）
-        const counts: {[key: string]: number} = {};
-        clientsWithTestCases.forEach((client) => {
-          counts[client.id] = 0;
-        });
-        setClientMessageCounts(counts);
-        
-        console.log('加载的AI客户:', clientsWithTestCases);
-      }
-    } catch (error) {
-      console.error('加载AI客户失败:', error);
-    }
-  };
-
-  const createNewClient = () => {
-    setEditingClient(null);
-    setShowConfigModal(true);
-  };
-
-  const editClient = (client: AIClient) => {
-    setEditingClient(client);
-    setShowConfigModal(true);
-  };
-
-  const saveClient = async (clientData: Omit<AIClient, 'id' | 'isActive'>) => {
-    try {
-      const categoryTestCases = testCases.filter(tc => tc.category === clientData.category);
-      
-      if (editingClient) {
-        // 更新现有客户
-        const { error: updateError } = await supabase
-          .from('ai_clients')
-          .update({
-            name: clientData.name,
-            category: clientData.category,
-            prompt: clientData.prompt,
-            max_messages: clientData.max_messages,
-            use_random_generation: clientData.use_random_generation
-          })
-          .eq('id', editingClient.id);
-
-        if (updateError) throw updateError;
-
-        // 删除旧的测试用例关联
-        await supabase
-          .from('ai_client_test_cases')
-          .delete()
-          .eq('ai_client_id', editingClient.id);
-
-        // 创建新的测试用例关联
-        if (categoryTestCases.length > 0) {
-          const testCaseLinks = categoryTestCases.map(tc => ({
-            ai_client_id: editingClient.id,
-            test_case_id: tc.id
-          }));
-
-          await supabase
-            .from('ai_client_test_cases')
-            .insert(testCaseLinks);
-        }
-
-        toast({
-          title: "客户配置已更新",
-          description: `${clientData.name} 的配置已成功更新`,
-        });
-      } else {
-        // 创建新客户
-        const { data: newClient, error: insertError } = await supabase
-          .from('ai_clients')
-          .insert({
-            name: clientData.name,
-            category: clientData.category,
-            prompt: clientData.prompt,
-            max_messages: clientData.max_messages,
-            use_random_generation: clientData.use_random_generation
-          })
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-
-        // 创建测试用例关联
-        if (categoryTestCases.length > 0) {
-          const testCaseLinks = categoryTestCases.map(tc => ({
-            ai_client_id: newClient.id,
-            test_case_id: tc.id
-          }));
-
-          await supabase
-            .from('ai_client_test_cases')
-            .insert(testCaseLinks);
-        }
-
-        toast({
-          title: "新客户已创建",
-          description: `${clientData.name} 已成功创建`,
-        });
-      }
-
-      // 重新加载客户列表
-      await loadAIClients();
-      
-    } catch (error) {
-      console.error('保存AI客户失败:', error);
-      toast({
-        title: "操作失败",
-        description: "保存AI客户时发生错误",
-        variant: "destructive"
-      });
-    }
-    
-    setShowConfigModal(false);
-    setEditingClient(null);
-  };
-
-  const deleteClient = async (clientId: string) => {
-    try {
-      const { error } = await supabase
-        .from('ai_clients')
-        .delete()
-        .eq('id', clientId);
-
-      if (error) throw error;
-
-      setClients(prev => prev.filter(c => c.id !== clientId));
-      setClientMessageCounts(prev => {
-        const newCounts = {...prev};
-        delete newCounts[clientId];
-        return newCounts;
-      });
-      
-      toast({
-        title: "客户已删除",
-        description: "AI客户已成功删除",
-      });
-    } catch (error) {
-      console.error('删除AI客户失败:', error);
-      toast({
-        title: "删除失败",
-        description: "删除AI客户时发生错误",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const toggleClientActive = (clientId: string) => {
-    setClients(prev => prev.map(c => 
-      c.id === clientId ? { ...c, isActive: !c.isActive } : c
+  const toggleClientActivity = (clientId: string) => {
+    setClients(clients.map(client =>
+      client.id === clientId ? { ...client, isActive: !client.isActive } : client
     ));
-    
-    // 检查是否所有客户都已停止，如果是则停止全局自动模式
-    if (isGlobalAutoMode) {
-      const updatedClients = clients.map(c => 
-        c.id === clientId ? { ...c, isActive: !c.isActive } : c
+  };
+
+  const sendMessage = (clientId: string) => {
+    const currentInput = input[clientId] || '';
+    if (currentInput.trim() === '') return;
+
+    const newMessage: ChatMessage = {
+      id: uuidv4(),
+      content: currentInput,
+      sender: 'customer',
+      timestamp: new Date(),
+    };
+
+    setMessages(prevMessages => ({
+      ...prevMessages,
+      [clientId]: [...(prevMessages[clientId] || []), newMessage],
+    }));
+
+    setInput(prevInput => ({ ...prevInput, [clientId]: '' }));
+
+    // 模拟AI客服回复
+    setTimeout(() => {
+      const aiResponse: ChatMessage = {
+        id: uuidv4(),
+        content: `您好，我是 ${clients.find(c => c.id === clientId)?.name}，我收到了您的消息: "${currentInput}"`,
+        sender: 'service',
+        timestamp: new Date(),
+      };
+
+      setClients(prevClients =>
+        prevClients.map(client =>
+          client.id === clientId
+            ? { ...client, messageCount: client.messageCount + 1 }
+            : client
+        )
       );
-      
-      const activeClients = updatedClients.filter(c => c.isActive);
-      if (activeClients.length === 0) {
-        setIsGlobalAutoMode(false);
-        toast({
-          title: "全局自动模式已停止",
-          description: "所有AI客户都已停止",
-        });
-      }
-    }
-  };
 
-  const updateClientMessageCount = (clientId: string, count: number) => {
-    setClientMessageCounts(prev => {
-      const newCounts = {...prev, [clientId]: count};
-      console.log(`更新客户 ${clientId} 消息计数: ${count}`);
-      return newCounts;
-    });
-  };
-
-  const startGlobalAutoMode = () => {
-    if (!apiKey) {
-      toast({
-        title: "API密钥未设置",
-        description: "请先在设置中配置DeepSeek API密钥",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (clients.length === 0) {
-      toast({
-        title: "无可用客户",
-        description: "请先创建至少一个AI客户",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // 检查是否有客户还未达到消息上限
-    const availableClients = clients.filter(c => {
-      const messageCount = clientMessageCounts[c.id] || 0;
-      return messageCount < c.max_messages;
-    });
-
-    if (availableClients.length === 0) {
-      toast({
-        title: "所有客户已完成",
-        description: "所有AI客户都已达到消息上限",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsGlobalAutoMode(true);
-    // 只激活还未达到限制的客户
-    setClients(prev => prev.map(c => {
-      const messageCount = clientMessageCounts[c.id] || 0;
-      const shouldActivate = messageCount < c.max_messages;
-      console.log(`客户 ${c.name}: 消息数 ${messageCount}/${c.max_messages}, 激活: ${shouldActivate}`);
-      return { ...c, isActive: shouldActivate };
-    }));
-    
-    toast({
-      title: "全局自动模式已启动",
-      description: `${availableClients.length} 个AI客户开始自动对话`,
-    });
-  };
-
-  const stopGlobalAutoMode = () => {
-    setIsGlobalAutoMode(false);
-    setClients(prev => prev.map(c => ({ ...c, isActive: false })));
-    
-    toast({
-      title: "全局自动模式已停止",
-      description: "所有AI客户停止自动对话",
-    });
-  };
-
-  const clearAllMessages = () => {
-    // 通知所有客户清空消息
-    const clearEvent = new CustomEvent('clearAllClientMessages');
-    window.dispatchEvent(clearEvent);
-    
-    // 重置消息计数
-    setClientMessageCounts(prev => {
-      const newCounts = {...prev};
-      Object.keys(newCounts).forEach(key => {
-        newCounts[key] = 0;
-      });
-      return newCounts;
-    });
-    
-    // 如果在全局自动模式，也停止它
-    if (isGlobalAutoMode) {
-      stopGlobalAutoMode();
-    }
-    
-    toast({
-      title: "消息已清空",
-      description: "所有对话记录已清空",
-    });
-  };
-
-  // 检查是否所有客户都已达到上限
-  const allClientsAtLimit = clients.length > 0 && clients.every(client => {
-    const messageCount = clientMessageCounts[client.id] || 0;
-    return messageCount >= client.max_messages;
-  });
-
-  // 准备全局热力图数据
-  const prepareGlobalHeatmapData = () => {
-    return clients.map(client => ({
-      id: client.id,
-      name: client.name,
-      category: client.category,
-      messageCount: clientMessageCounts[client.id] || 0,
-      maxMessages: client.max_messages,
-      isActive: client.isActive
-    }));
+      setMessages(prevMessages => ({
+        ...prevMessages,
+        [clientId]: [...(prevMessages[clientId] || []), aiResponse],
+      }));
+    }, Math.random() * 1000 + 500);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      <div className="w-full h-screen flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-white/10 backdrop-blur-md border-b border-white/20 p-4 flex-shrink-0">
-          <div className="flex items-center justify-between">
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-3xl font-bold text-white flex items-center">
+              <Users className="h-8 w-8 mr-3 text-blue-400" />
+              多AI客户对话测试
+            </h1>
             <div className="flex items-center space-x-3">
-              <Link to="/">
-                <Button variant="outline" size="sm" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  返回
-                </Button>
-              </Link>
-              <div>
-                <h1 className="text-xl font-bold text-white">多AI客户对话测试</h1>
-                <p className="text-sm text-gray-300">多个AI客户同时与AI销售进行安全性测试</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-2">
               <Button
                 onClick={() => setShowGlobalHeatmap(true)}
-                variant="outline"
-                size="sm"
-                className="bg-red-600/20 border-red-500/30 text-red-300 hover:bg-red-600/30"
+                className="bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
               >
                 <TrendingUp className="h-4 w-4 mr-2" />
                 全局攻击热力图
               </Button>
-              
               <Button
-                onClick={() => setShowExcelUploader(true)}
-                variant="outline"
-                size="sm"
-                className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                onClick={() => setShowExcelUploader(!showExcelUploader)}
+                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
               >
-                上传测试用例
+                <Upload className="h-4 w-4 mr-2" />
+                {showExcelUploader ? '隐藏' : '上传'}测试用例
               </Button>
-              
               <Button
-                onClick={createNewClient}
-                className="bg-green-600 hover:bg-green-700 text-white"
+                onClick={() => setShowClientModal(true)}
+                className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                添加AI客户
+                添加客户
               </Button>
-              
-              <Button
-                onClick={clearAllMessages}
-                variant="outline"
-                size="sm"
-                className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-              >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                清空所有
-              </Button>
-              
-              {!isGlobalAutoMode ? (
-                <Button
-                  onClick={startGlobalAutoMode}
-                  className={`text-white transition-all duration-300 ${
-                    allClientsAtLimit 
-                      ? 'bg-green-600 hover:bg-green-700' 
-                      : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
-                  disabled={!apiKey || clients.length === 0}
-                >
-                  <Play className="h-4 w-4 mr-2" />
-                  {allClientsAtLimit ? '全局自动' : '全局自动'}
-                </Button>
-              ) : (
-                <Button
-                  onClick={stopGlobalAutoMode}
-                  className="bg-red-600 hover:bg-red-700 text-white"
-                >
-                  <Pause className="h-4 w-4 mr-2" />
-                  停止所有
-                </Button>
-              )}
             </div>
           </div>
+          <p className="text-gray-300">同时与多个AI客户进行安全测试对话</p>
         </div>
 
-        {/* 状态栏 */}
-        <div className="bg-white/5 border-b border-white/10 p-2 flex-shrink-0">
-          <div className="flex items-center justify-between text-sm text-gray-300">
-            <span>活跃客户: {clients.filter(c => c.isActive).length}/{clients.length}</span>
-            <span>可用类别: {categories.length}</span>
-            <span>测试用例: {testCases.length}</span>
-            <span>总客户消息: {Object.values(clientMessageCounts).reduce((sum, count) => sum + count, 0)}</span>
-            <span className={apiKey ? "text-green-300" : "text-red-300"}>
-              API状态: {apiKey ? "已配置" : "未配置"}
-            </span>
-          </div>
-        </div>
-
-        {/* 客户对话区域 - 调整布局适配 */}
-        <div className="flex-1 overflow-hidden">
-          {isLoading ? (
-            <div className="h-full flex items-center justify-center">
-              <Card className="bg-white/10 backdrop-blur-md border-white/20 p-8">
-                <CardContent className="text-center">
-                  <div className="flex items-center justify-center space-x-3 mb-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-                    <div className="animate-pulse">
-                      <div className="flex space-x-1">
-                        <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
-                        <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                        <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                      </div>
-                    </div>
-                  </div>
-                  <h3 className="text-lg font-semibold text-white mb-2">正在加载AI客户数据</h3>
-                  <p className="text-sm text-gray-300">请稍候，正在获取测试用例和客户配置...</p>
-                </CardContent>
-              </Card>
-            </div>
-          ) : clients.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
-              <Card className="bg-white/10 backdrop-blur-md border-white/20 p-8">
-                <CardContent className="text-center">
-                  <Plus className="h-16 w-16 mx-auto mb-4 text-gray-400" />
-                  <h3 className="text-lg font-semibold text-white mb-2">暂无AI客户</h3>
-                  <p className="text-gray-300 mb-4">点击"添加AI客户"开始创建您的第一个AI客户</p>
-                  <Button onClick={createNewClient} className="bg-green-600 hover:bg-green-700">
-                    <Plus className="h-4 w-4 mr-2" />
-                    添加AI客户
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          ) : (
-            <div className="h-full px-4 py-4">
-              <div className="h-full overflow-y-auto">
-                <div className="grid grid-cols-3 gap-4">
-                  {clients.map(client => (
-                    <div key={client.id} className="w-full">
-                      <ClientChatRoom
-                        client={client}
-                        onEdit={() => editClient(client)}
-                        onDelete={() => deleteClient(client.id)}
-                        onToggleActive={() => toggleClientActive(client.id)}
-                        onMessageCountChange={updateClientMessageCount}
-                        apiKey={apiKey}
-                        isGlobalAutoMode={isGlobalAutoMode}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 配置模态框 */}
-        {showConfigModal && (
-          <ClientConfigModal
-            isOpen={showConfigModal}
-            onClose={() => {
-              setShowConfigModal(false);
-              setEditingClient(null);
-            }}
-            onSave={saveClient}
-            categories={categories}
-            testCases={testCases}
-            editingClient={editingClient}
-          />
-        )}
-
-        {/* Excel上传模态框 */}
+        {/* Excel Uploader */}
         {showExcelUploader && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-slate-900 p-6 rounded-lg max-w-2xl w-full mx-4">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-white">上传测试用例</h2>
-                <Button
-                  onClick={() => setShowExcelUploader(false)}
-                  variant="ghost"
-                  size="sm"
-                  className="text-white hover:bg-white/20"
-                >
-                  ×
-                </Button>
-              </div>
-              <ExcelUploader />
-              <div className="mt-4 flex justify-end">
-                <Button
-                  onClick={() => {
-                    setShowExcelUploader(false);
-                    loadTestCases(); // 重新加载测试用例
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  完成
-                </Button>
-              </div>
-            </div>
-          </div>
+          <ExcelUploader />
         )}
 
-        {/* 全局完成通知 */}
-        <GlobalLimitNotification
-          isVisible={showGlobalLimitNotification}
-          onClose={() => setShowGlobalLimitNotification(false)}
-        />
-
-        {/* 全局攻击热力图模态框 */}
-        <GlobalAttackHeatmapModal
-          isOpen={showGlobalHeatmap}
-          onClose={() => setShowGlobalHeatmap(false)}
-          clients={prepareGlobalHeatmapData()}
-        />
+        {/* AI Client List and Chat */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {clients.map(client => (
+            <Card key={client.id} className="bg-white/5 backdrop-blur-md border-white/10">
+              <CardHeader className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <Avatar>
+                    <AvatarImage src={`https://api.dicebear.com/7.x/lorelei/svg?seed=${client.name}`} />
+                    <AvatarFallback>{client.name.substring(0, 2)}</AvatarFallback>
+                  </Avatar>
+                  <div className="space-y-1">
+                    <CardTitle className="text-white">{client.name}</CardTitle>
+                    <p className="text-sm text-gray-400">{client.category}</p>
+                  </div>
+                </div>
+                <Popover>
+                  <PopoverTrigger>
+                    <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30 transition-colors cursor-pointer">
+                      配置
+                    </Badge>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 bg-slate-800 border-white/20 text-white">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-400">运行状态</span>
+                        <Switch
+                          id={`active-${client.id}`}
+                          checked={client.isActive}
+                          onCheckedChange={() => toggleClientActivity(client.id)}
+                        />
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-400">消息数量</span>
+                        <Slider
+                          defaultValue={[client.maxMessages]}
+                          max={2000}
+                          step={100}
+                          onValueChange={(value) => {
+                            setClients(clients.map(c =>
+                              c.id === client.id ? { ...c, maxMessages: value[0] } : c
+                            ))
+                          }}
+                        />
+                        <p className="text-xs text-gray-300 mt-1">
+                          当前: {client.maxMessages}
+                        </p>
+                      </div>
+                      <Button onClick={() => setShowHeatmap(prev => ({ ...prev, [client.id]: true }))} variant="outline">
+                        <TrendingUp className="h-4 w-4 mr-2" />
+                        攻击热力图
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <ScrollArea className="h-[300px] pr-4">
+                  <div className="space-y-2">
+                    {messages[client.id]?.map(message => (
+                      <div
+                        key={message.id}
+                        className={`flex flex-col text-sm ${message.sender === 'customer' ? 'items-end' : 'items-start'}`}
+                      >
+                        <div
+                          className={`px-3 py-2 rounded-lg ${message.sender === 'customer' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100'
+                            }`}
+                        >
+                          {message.content}
+                        </div>
+                        <span className="text-xs text-gray-400 mt-1">
+                          {message.sender === 'customer' ? '你' : client.name} - {message.timestamp.toLocaleTimeString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+                <Separator />
+                <div className="flex items-center space-x-2">
+                  <Textarea
+                    value={input[client.id] || ''}
+                    onChange={(e) => setInput(prev => ({ ...prev, [client.id]: e.target.value }))}
+                    placeholder="输入消息..."
+                    className="bg-white/10 border-white/20 text-white placeholder-gray-300 flex-1"
+                  />
+                  <Button onClick={() => sendMessage(client.id)} size="sm">
+                    发送
+                  </Button>
+                </div>
+                <div className="text-sm text-gray-400">
+                  消息总数: {messages[client.id]?.length || 0} / {client.maxMessages}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
+
+      {/* Client Modal */}
+      <Dialog open={isClientModalOpen} onOpenChange={setShowClientModal}>
+        <DialogContent className="max-w-md bg-slate-900 border-white/20 text-white">
+          <DialogHeader>
+            <DialogTitle>添加 AI 客户</DialogTitle>
+            <DialogDescription>
+              创建一个新的 AI 客户进行对话测试
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(addClient)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>客户名称</FormLabel>
+                    <FormControl>
+                      <Input placeholder="AI 客户名称" className="bg-white/10 border-white/20 text-white" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>类别</FormLabel>
+                    <FormControl>
+                      <Input placeholder="AI 客户类别" className="bg-white/10 border-white/20 text-white" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="prompt"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Prompt</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="AI 客户 Prompt"
+                        className="bg-white/10 border-white/20 text-white"
+                        rows={3}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="maxMessages"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>消息总数</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="消息总数"
+                        className="bg-white/10 border-white/20 text-white"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button type="submit">添加客户</Button>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Attack Heatmap Modals */}
+      {clients.map(client => (
+        <AttackHeatmapModal
+          key={client.id}
+          isOpen={showHeatmap[client.id] || false}
+          onClose={() => setShowHeatmap(prev => ({ ...prev, [client.id]: false }))}
+          messages={messages[client.id] || []}
+          clientName={client.name}
+        />
+      ))}
+
+      {/* Global Attack Heatmap Modal */}
+      <GlobalAttackHeatmapModal
+        isOpen={showGlobalHeatmap}
+        onClose={() => setShowGlobalHeatmap(false)}
+        clients={clients}
+      />
     </div>
   );
 };

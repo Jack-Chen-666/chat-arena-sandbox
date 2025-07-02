@@ -157,7 +157,7 @@ const TestCaseSelector: React.FC<TestCaseSelectorProps> = ({
                     <SelectValue placeholder="请选择测试类别" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-white/20">
-                    <SelectItem value="" className="text-white">所有类别</SelectItem>
+                    <SelectItem value="all" className="text-white">所有类别</SelectItem>
                     {categories.map((category) => (
                       <SelectItem key={category} value={category} className="text-white">
                         {category}
