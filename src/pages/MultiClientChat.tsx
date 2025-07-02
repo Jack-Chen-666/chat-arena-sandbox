@@ -324,8 +324,9 @@ const MultiClientChat = () => {
           
           setTimeout(() => {
             toast({
-              title: "全部测试完成",
+              title: "🎉 全部测试完成！",
               description: "所有AI客户均已达到消息上限，全局自动模式已停止",
+              className: "bg-green-600 border-green-500 text-white"
             });
           }, 500);
         }
