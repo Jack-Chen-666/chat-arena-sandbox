@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -94,7 +95,8 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
   });
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // 不再自动滚动
+    // messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
@@ -130,15 +132,15 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     return () => clearTimeout(timer);
   }, [customerMessageCount, client.id, onMessageCountChange]);
 
-  // 监听消息计数变化，当达到上限时显示通知
+  // 监听消息计数变化，当达到上限时显示通知（仅限手动模式）
   useEffect(() => {
-    if (customerMessageCount >= client.max_messages && customerMessageCount > 0) {
-      // 延迟显示通知，确保用户看到最后一条消息
+    if (customerMessageCount >= client.max_messages && customerMessageCount > 0 && !isGlobalAutoMode) {
+      // 只有在非全局自动模式下才显示个人通知
       setTimeout(() => {
         setShowLimitNotification(true);
       }, 1000);
     }
-  }, [customerMessageCount, client.max_messages]);
+  }, [customerMessageCount, client.max_messages, isGlobalAutoMode]);
 
   const addMessage = (content: string, sender: 'customer' | 'service') => {
     const newMessage: Message = {
@@ -610,12 +612,14 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
         </CardContent>
       </Card>
 
-      {/* 炫酷通知 */}
-      <CoolNotification
-        isVisible={showLimitNotification}
-        clientName={client.name}
-        onClose={() => setShowLimitNotification(false)}
-      />
+      {/* 炫酷通知 - 只在非全局自动模式下显示 */}
+      {!isGlobalAutoMode && (
+        <CoolNotification
+          isVisible={showLimitNotification}
+          clientName={client.name}
+          onClose={() => setShowLimitNotification(false)}
+        />
+      )}
 
       {/* 攻击热力图模态框 */}
       <AttackHeatmapModal

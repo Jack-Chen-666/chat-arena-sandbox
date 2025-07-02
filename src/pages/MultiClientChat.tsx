@@ -254,6 +254,8 @@ const MultiClientChat = () => {
       return;
     }
     setIsGlobalAutoMode(true);
+    // 激活所有客户
+    setClients(clients.map(client => ({ ...client, isActive: true })));
   };
 
   const handleStopGlobalAuto = () => {
@@ -270,10 +272,18 @@ const MultiClientChat = () => {
     setMessageStats(prev => ({ ...prev, [clientId]: count }));
     
     const client = clients.find(c => c.id === clientId);
-    if (client && count >= client.max_messages) {
-      setTimeout(() => {
-        setShowGlobalLimitNotification(true);
-      }, 1000);
+    if (client && count >= client.max_messages && isGlobalAutoMode) {
+      // 检查是否所有客户都达到上限
+      const allAtLimit = clients.every(c => {
+        const currentCount = c.id === clientId ? count : (messageStats[c.id] || 0);
+        return currentCount >= c.max_messages;
+      });
+      
+      if (allAtLimit) {
+        setTimeout(() => {
+          setShowGlobalLimitNotification(true);
+        }, 1000);
+      }
     }
   };
 
@@ -371,7 +381,7 @@ const MultiClientChat = () => {
             <Button
               onClick={handleClearAllMessages}
               variant="outline"
-              className="border-white/30 text-white hover:bg-white/20"
+              className="border-white/30 text-white hover:bg-white/20 bg-white/10"
             >
               <RotateCcw className="h-4 w-4 mr-2" />
               清空所有
