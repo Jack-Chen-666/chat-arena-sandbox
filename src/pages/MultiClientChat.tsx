@@ -1,48 +1,22 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Textarea } from '@/components/ui/textarea';
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Switch } from "@/components/ui/switch"
-import { Slider } from "@/components/ui/slider"
-import { useToast } from "@/hooks/use-toast"
-import { Plus, Users, MessageSquare, TrendingUp, Upload, Send } from "lucide-react";
-import { v4 as uuidv4 } from 'uuid';
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import * as z from "zod"
-import AttackHeatmapModal from '@/components/AttackHeatmapModal';
+import { ArrowLeft, RotateCcw, Play, Pause, TrendingUp, Upload, Plus } from "lucide-react";
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from "@/hooks/use-toast";
+import ClientChatRoom from '@/components/ClientChatRoom';
+import ClientConfigModal from '@/components/ClientConfigModal';
 import GlobalAttackHeatmapModal from '@/components/GlobalAttackHeatmapModal';
 import ExcelUploader from '@/components/ExcelUploader';
+import GlobalLimitNotification from '@/components/GlobalLimitNotification';
 
-interface ChatMessage {
+interface TestCase {
   id: string;
-  content: string;
-  sender: 'customer' | 'service';
-  timestamp: Date;
+  attack_type: string;
+  category: string;
+  test_prompt: string;
+  expected_result: string;
 }
 
 interface AIClient {
@@ -50,190 +24,306 @@ interface AIClient {
   name: string;
   category: string;
   prompt: string;
-  messageCount: number;
-  maxMessages: number;
+  max_messages: number;
+  use_random_generation: boolean;
   isActive: boolean;
+  testCases: TestCase[];
 }
 
-const formSchema = z.object({
-  name: z.string().min(2, {
-    message: "Client name must be at least 2 characters.",
-  }),
-  category: z.string().min(2, {
-    message: "Category must be at least 2 characters.",
-  }),
-  prompt: z.string().min(10, {
-    message: "Prompt must be at least 10 characters.",
-  }),
-  maxMessages: z.number().min(50, {
-    message: "Max messages must be at least 50.",
-  }).max(2000, {
-    message: "Max messages must be less than 2000.",
-  }),
-})
-
 const MultiClientChat = () => {
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [clients, setClients] = useState<AIClient[]>([]);
-  const [messages, setMessages] = useState<{ [clientId: string]: ChatMessage[] }>({});
-  const [input, setInput] = useState<{ [clientId: string]: string }>({});
-  const [isClientModalOpen, setShowClientModal] = useState(false);
-  const [showHeatmap, setShowHeatmap] = useState<{ [clientId: string]: boolean }>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<AIClient | null>(null);
   const [showGlobalHeatmap, setShowGlobalHeatmap] = useState(false);
   const [showExcelUploader, setShowExcelUploader] = useState(false);
-  const { toast } = useToast()
-
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: "",
-      category: "",
-      prompt: "",
-      maxMessages: 500,
-    },
-  })
+  const [isGlobalAutoMode, setIsGlobalAutoMode] = useState(false);
+  const [messageStats, setMessageStats] = useState<{[key: string]: number}>({});
+  const [apiKey, setApiKey] = useState('');
+  const [showGlobalLimitNotification, setShowGlobalLimitNotification] = useState(false);
 
   useEffect(() => {
-    // Load clients from local storage on component mount
-    const storedClients = localStorage.getItem('aiClients');
-    if (storedClients) {
-      const parsedClients = JSON.parse(storedClients);
-      console.log('Loaded clients from localStorage:', parsedClients);
-      setClients(parsedClients);
+    const savedApiKey = localStorage.getItem('deepseek-api-key');
+    if (savedApiKey) {
+      setApiKey(savedApiKey);
     }
+    loadClients();
   }, []);
 
-  useEffect(() => {
-    // Save clients to local storage whenever the clients state changes
-    if (clients.length > 0) {
-      console.log('Saving clients to localStorage:', clients);
-      localStorage.setItem('aiClients', JSON.stringify(clients));
-    }
-  }, [clients]);
+  const loadClients = async () => {
+    try {
+      setIsLoading(true);
+      const { data: clientsData, error: clientsError } = await supabase
+        .from('ai_clients')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-  const addClient = (values: z.infer<typeof formSchema>) => {
-    const newClient: AIClient = {
-      id: uuidv4(),
-      name: values.name,
-      category: values.category,
-      prompt: values.prompt,
-      messageCount: 0,
-      maxMessages: values.maxMessages,
-      isActive: false,
-    };
-    setClients([...clients, newClient]);
-    setShowClientModal(false);
-    form.reset();
-    toast({
-      title: "添加成功",
-      description: `${values.name} AI 客户已成功添加`,
-    })
+      if (clientsError) throw clientsError;
+
+      if (clientsData && clientsData.length > 0) {
+        const clientsWithTestCases = await Promise.all(
+          clientsData.map(async (client) => {
+            const { data: testCasesData, error: testCasesError } = await supabase
+              .from('ai_client_test_cases')
+              .select(`
+                test_cases (
+                  id,
+                  attack_type,
+                  category,
+                  test_prompt,
+                  expected_result
+                )
+              `)
+              .eq('ai_client_id', client.id);
+
+            if (testCasesError) {
+              console.error('加载测试用例失败:', testCasesError);
+              return {
+                ...client,
+                isActive: false,
+                testCases: []
+              };
+            }
+
+            const testCases = testCasesData?.map(item => item.test_cases).filter(Boolean) || [];
+            
+            return {
+              ...client,
+              isActive: false,
+              testCases
+            };
+          })
+        );
+
+        setClients(clientsWithTestCases);
+      }
+    } catch (error) {
+      console.error('加载AI客户失败:', error);
+      toast({
+        title: "加载失败",
+        description: "无法加载AI客户列表",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const toggleClientActivity = (clientId: string) => {
+  const handleAddClient = () => {
+    setEditingClient(null);
+    setIsConfigModalOpen(true);
+  };
+
+  const handleEditClient = (client: AIClient) => {
+    setEditingClient(client);
+    setIsConfigModalOpen(true);
+  };
+
+  const handleDeleteClient = async (clientId: string) => {
+    try {
+      const { error } = await supabase
+        .from('ai_clients')
+        .delete()
+        .eq('id', clientId);
+
+      if (error) throw error;
+
+      setClients(clients.filter(client => client.id !== clientId));
+      toast({
+        title: "删除成功",
+        description: "AI客户已删除"
+      });
+    } catch (error) {
+      console.error('删除客户失败:', error);
+      toast({
+        title: "删除失败",
+        description: "无法删除AI客户",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleToggleClientActive = (clientId: string) => {
     setClients(clients.map(client =>
       client.id === clientId ? { ...client, isActive: !client.isActive } : client
     ));
   };
 
-  const sendMessage = (clientId: string) => {
-    const currentInput = input[clientId] || '';
-    if (currentInput.trim() === '') return;
-
-    const newMessage: ChatMessage = {
-      id: uuidv4(),
-      content: currentInput,
-      sender: 'customer',
-      timestamp: new Date(),
-    };
-
-    setMessages(prevMessages => ({
-      ...prevMessages,
-      [clientId]: [...(prevMessages[clientId] || []), newMessage],
-    }));
-
-    setInput(prevInput => ({ ...prevInput, [clientId]: '' }));
-
-    // 模拟AI客服回复
-    setTimeout(() => {
-      const aiResponse: ChatMessage = {
-        id: uuidv4(),
-        content: `您好，我是 ${clients.find(c => c.id === clientId)?.name}，我收到了您的消息: "${currentInput}"`,
-        sender: 'service',
-        timestamp: new Date(),
-      };
-
-      setClients(prevClients =>
-        prevClients.map(client =>
-          client.id === clientId
-            ? { ...client, messageCount: client.messageCount + 1 }
-            : client
-        )
-      );
-
-      setMessages(prevMessages => ({
-        ...prevMessages,
-        [clientId]: [...(prevMessages[clientId] || []), aiResponse],
-      }));
-    }, Math.random() * 1000 + 500);
+  const handleStartGlobalAuto = () => {
+    if (!apiKey) {
+      toast({
+        title: "API密钥未设置",
+        description: "请先在首页设置DeepSeek API密钥",
+        variant: "destructive"
+      });
+      return;
+    }
+    setIsGlobalAutoMode(true);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent, clientId: string) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage(clientId);
+  const handleStopGlobalAuto = () => {
+    setIsGlobalAutoMode(false);
+    setClients(clients.map(client => ({ ...client, isActive: false })));
+  };
+
+  const handleClearAllMessages = () => {
+    window.dispatchEvent(new CustomEvent('clearAllClientMessages'));
+    setMessageStats({});
+  };
+
+  const handleMessageCountChange = (clientId: string, count: number) => {
+    setMessageStats(prev => ({ ...prev, [clientId]: count }));
+    
+    const client = clients.find(c => c.id === clientId);
+    if (client && count >= client.max_messages) {
+      setTimeout(() => {
+        setShowGlobalLimitNotification(true);
+      }, 1000);
     }
   };
+
+  const getActiveClientCount = () => {
+    return clients.filter(client => client.isActive).length;
+  };
+
+  const getAvailableTestCases = () => {
+    return clients.reduce((total, client) => total + client.testCases.length, 0);
+  };
+
+  const getTotalMessagesSent = () => {
+    return Object.values(messageStats).reduce((total, count) => total + count, 0);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+        <div className="text-white">加载中...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-3xl font-bold text-white flex items-center">
-              <Users className="h-8 w-8 mr-3 text-blue-400" />
-              多AI客户对话测试
-            </h1>
-            <div className="flex items-center space-x-3">
-              <Button
-                onClick={() => setShowGlobalHeatmap(true)}
-                className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 border-0"
-              >
-                <TrendingUp className="h-4 w-4 mr-2" />
-                攻击热力图
-              </Button>
-              <Button
-                onClick={() => setShowExcelUploader(!showExcelUploader)}
-                className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 border-0"
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                {showExcelUploader ? '隐藏' : '上传'}测试用例
-              </Button>
-              <Button
-                onClick={() => setShowClientModal(true)}
-                className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                添加客户
-              </Button>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-4">
+            <Button
+              onClick={() => navigate('/')}
+              variant="ghost"
+              size="sm"
+              className="text-white hover:bg-white/20"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              返回
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-white">多AI客户对话测试</h1>
+              <p className="text-gray-300 text-sm">同时与多个AI客户进行安全测试对话</p>
             </div>
           </div>
-          <p className="text-gray-300">同时与多个AI客户进行安全测试对话</p>
+          
+          <div className="flex items-center space-x-3">
+            <Button
+              onClick={() => setShowGlobalHeatmap(true)}
+              className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white"
+            >
+              <TrendingUp className="h-4 w-4 mr-2" />
+              攻击热力图
+            </Button>
+            <Button
+              onClick={() => setShowExcelUploader(!showExcelUploader)}
+              className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              {showExcelUploader ? '隐藏' : '上传'}测试用例
+            </Button>
+            <Button
+              onClick={handleAddClient}
+              className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              添加客户
+            </Button>
+          </div>
+        </div>
+
+        {/* Stats Bar */}
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <div className="bg-white/10 backdrop-blur-md rounded-lg p-4 text-center">
+            <div className="text-2xl font-bold text-blue-400">{getActiveClientCount()}</div>
+            <div className="text-sm text-gray-300">活跃客户: {getActiveClientCount()}/{clients.length}</div>
+          </div>
+          <div className="bg-white/10 backdrop-blur-md rounded-lg p-4 text-center">
+            <div className="text-2xl font-bold text-green-400">{getAvailableTestCases()}</div>
+            <div className="text-sm text-gray-300">可用案例: {getAvailableTestCases()}</div>
+          </div>
+          <div className="bg-white/10 backdrop-blur-md rounded-lg p-4 text-center">
+            <div className="text-2xl font-bold text-purple-400">{getTotalMessagesSent()}</div>
+            <div className="text-sm text-gray-300">测试用例: {getTotalMessagesSent()}</div>
+          </div>
+          <div className="bg-white/10 backdrop-blur-md rounded-lg p-4 text-center">
+            <div className="text-lg font-bold text-cyan-400">
+              {apiKey ? '已配置' : '未配置'}
+            </div>
+            <div className="text-sm text-gray-300">API状态: {apiKey ? '已配置' : '未配置'}</div>
+          </div>
+        </div>
+
+        {/* Control Bar */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-3">
+            <Button
+              onClick={handleClearAllMessages}
+              variant="outline"
+              className="border-white/30 text-white hover:bg-white/20"
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              清空所有
+            </Button>
+          </div>
+          
+          <div className="flex items-center space-x-3">
+            {!isGlobalAutoMode ? (
+              <Button
+                onClick={handleStartGlobalAuto}
+                disabled={!apiKey || clients.length === 0}
+                className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+              >
+                <Play className="h-4 w-4 mr-2" />
+                全局自动
+              </Button>
+            ) : (
+              <Button
+                onClick={handleStopGlobalAuto}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Pause className="h-4 w-4 mr-2" />
+                停止自动
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Excel Uploader */}
         {showExcelUploader && (
-          <ExcelUploader />
+          <div className="mb-6">
+            <ExcelUploader />
+          </div>
         )}
 
-        {/* AI Client List and Chat */}
+        {/* Client Grid */}
         {clients.length === 0 ? (
           <div className="text-center py-12">
-            <Users className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-white mb-2">暂无AI客户</h3>
-            <p className="text-gray-400 mb-6">请点击"添加客户"按钮创建您的第一个AI客户</p>
+            <div className="text-gray-400 mb-6">
+              <Plus className="h-16 w-16 mx-auto mb-4 opacity-50" />
+              <h3 className="text-xl font-semibold text-white mb-2">暂无AI客户</h3>
+              <p className="text-gray-400 mb-6">请点击"添加客户"按钮创建您的第一个AI客户</p>
+            </div>
             <Button
-              onClick={() => setShowClientModal(true)}
+              onClick={handleAddClient}
               className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -242,207 +332,39 @@ const MultiClientChat = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {clients.map(client => (
-              <Card key={client.id} className="bg-white/5 backdrop-blur-md border-white/10">
-                <CardHeader className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <Avatar>
-                      <AvatarImage src={`https://api.dicebear.com/7.x/lorelei/svg?seed=${client.name}`} />
-                      <AvatarFallback>{client.name.substring(0, 2)}</AvatarFallback>
-                    </Avatar>
-                    <div className="space-y-1">
-                      <CardTitle className="text-white">{client.name}</CardTitle>
-                      <p className="text-sm text-gray-400">{client.category}</p>
-                    </div>
-                  </div>
-                  <Popover>
-                    <PopoverTrigger>
-                      <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30 transition-colors cursor-pointer">
-                        配置
-                      </Badge>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-80 bg-slate-800 border-white/20 text-white">
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-400">运行状态</span>
-                          <Switch
-                            id={`active-${client.id}`}
-                            checked={client.isActive}
-                            onCheckedChange={() => toggleClientActivity(client.id)}
-                          />
-                        </div>
-                        <div>
-                          <span className="text-sm text-gray-400">消息数量</span>
-                          <Slider
-                            defaultValue={[client.maxMessages]}
-                            max={2000}
-                            step={100}
-                            onValueChange={(value) => {
-                              setClients(clients.map(c =>
-                                c.id === client.id ? { ...c, maxMessages: value[0] } : c
-                              ))
-                            }}
-                          />
-                          <p className="text-xs text-gray-300 mt-1">
-                            当前: {client.maxMessages}
-                          </p>
-                        </div>
-                        <Button onClick={() => setShowHeatmap(prev => ({ ...prev, [client.id]: true }))} variant="outline">
-                          <TrendingUp className="h-4 w-4 mr-2" />
-                          攻击热力图
-                        </Button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <ScrollArea className="h-[300px] pr-4">
-                    <div className="space-y-2">
-                      {messages[client.id]?.map(message => (
-                        <div
-                          key={message.id}
-                          className={`flex flex-col text-sm ${message.sender === 'customer' ? 'items-end' : 'items-start'}`}
-                        >
-                          <div
-                            className={`px-3 py-2 rounded-lg max-w-[80%] ${message.sender === 'customer' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100'
-                              }`}
-                          >
-                            {message.content}
-                          </div>
-                          <span className="text-xs text-gray-400 mt-1">
-                            {message.sender === 'customer' ? '你' : client.name} - {message.timestamp.toLocaleTimeString()}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                  <Separator />
-                  <div className="flex items-end space-x-2">
-                    <div className="flex-1">
-                      <Textarea
-                        value={input[client.id] || ''}
-                        onChange={(e) => setInput(prev => ({ ...prev, [client.id]: e.target.value }))}
-                        placeholder="输入消息..."
-                        className="bg-white/10 border-white/20 text-white placeholder-gray-300 resize-none min-h-[80px]"
-                        rows={2}
-                        onKeyPress={(e) => handleKeyPress(e, client.id)}
-                      />
-                    </div>
-                    <Button 
-                      onClick={() => sendMessage(client.id)} 
-                      size="lg"
-                      className="h-[80px] px-4 bg-blue-600 hover:bg-blue-700"
-                      disabled={!input[client.id]?.trim()}
-                    >
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="text-sm text-gray-400">
-                    消息总数: {messages[client.id]?.length || 0} / {client.maxMessages}
-                  </div>
-                </CardContent>
-              </Card>
+            {clients.map((client) => (
+              <ClientChatRoom
+                key={client.id}
+                client={client}
+                onEdit={() => handleEditClient(client)}
+                onDelete={() => handleDeleteClient(client.id)}
+                onToggleActive={() => handleToggleClientActive(client.id)}
+                onMessageCountChange={handleMessageCountChange}
+                apiKey={apiKey}
+                isGlobalAutoMode={isGlobalAutoMode}
+              />
             ))}
           </div>
         )}
       </div>
 
-      {/* Client Modal */}
-      <Dialog open={isClientModalOpen} onOpenChange={setShowClientModal}>
-        <DialogContent className="max-w-md bg-slate-900 border-white/20 text-white">
-          <DialogHeader>
-            <DialogTitle>添加 AI 客户</DialogTitle>
-            <DialogDescription>
-              创建一个新的 AI 客户进行对话测试
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(addClient)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>客户名称</FormLabel>
-                    <FormControl>
-                      <Input placeholder="AI 客户名称" className="bg-white/10 border-white/20 text-white" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="category"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>类别</FormLabel>
-                    <FormControl>
-                      <Input placeholder="AI 客户类别" className="bg-white/10 border-white/20 text-white" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="prompt"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Prompt</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="AI 客户 Prompt"
-                        className="bg-white/10 border-white/20 text-white"
-                        rows={3}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="maxMessages"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>消息总数</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        placeholder="消息总数"
-                        className="bg-white/10 border-white/20 text-white"
-                        {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button type="submit">添加客户</Button>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+      {/* Modals */}
+      <ClientConfigModal
+        isOpen={isConfigModalOpen}
+        onClose={() => setIsConfigModalOpen(false)}
+        client={editingClient}
+        onSave={loadClients}
+      />
 
-      {/* Attack Heatmap Modals */}
-      {clients.map(client => (
-        <AttackHeatmapModal
-          key={client.id}
-          isOpen={showHeatmap[client.id] || false}
-          onClose={() => setShowHeatmap(prev => ({ ...prev, [client.id]: false }))}
-          messages={messages[client.id] || []}
-          clientName={client.name}
-        />
-      ))}
-
-      {/* Global Attack Heatmap Modal */}
       <GlobalAttackHeatmapModal
         isOpen={showGlobalHeatmap}
         onClose={() => setShowGlobalHeatmap(false)}
         clients={clients}
+      />
+
+      <GlobalLimitNotification
+        isVisible={showGlobalLimitNotification}
+        onClose={() => setShowGlobalLimitNotification(false)}
       />
     </div>
   );
