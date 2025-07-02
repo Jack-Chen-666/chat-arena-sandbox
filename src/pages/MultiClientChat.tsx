@@ -301,16 +301,17 @@ const MultiClientChat = () => {
     
     const client = clients.find(c => c.id === clientId);
     if (client && count >= client.max_messages && !completedClients.has(clientId)) {
-      // 标记此客户已完成，避免重复通知
-      setCompletedClients(prev => new Set([...prev, clientId]));
-      
-      // 显示个人客户达到上限的toast通知
-      toast({
-        title: `${client.name} 测试完成`,
-        description: "已达到消息发送上限",
-      });
-      
+      // 只有在全局自动模式下才显示个人客户达到上限的通知
       if (isGlobalAutoMode) {
+        // 标记此客户已完成，避免重复通知
+        setCompletedClients(prev => new Set([...prev, clientId]));
+        
+        // 显示个人客户达到上限的toast通知
+        toast({
+          title: `${client.name} 测试完成`,
+          description: "已达到消息发送上限",
+        });
+        
         // 检查是否所有客户都达到上限
         const allAtLimit = clients.every(c => {
           const currentCount = c.id === clientId ? count : (messageStats[c.id] || 0);
