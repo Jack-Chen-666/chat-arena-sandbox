@@ -28,7 +28,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { useToast } from "@/hooks/use-toast"
-import { Plus, Users, MessageSquare,化, TrendingUp, Upload } from "lucide-react";
+import { Plus, Users, MessageSquare, TrendingUp, Upload } from "lucide-react";
 import { v4 as uuidv4 } from 'uuid';
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
