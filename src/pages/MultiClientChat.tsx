@@ -43,6 +43,8 @@ const MultiClientChat = () => {
   const [messageStats, setMessageStats] = useState<{[key: string]: number}>({});
   const [apiKey, setApiKey] = useState('');
   const [showGlobalLimitNotification, setShowGlobalLimitNotification] = useState(false);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [allTestCases, setAllTestCases] = useState<TestCase[]>([]);
 
   useEffect(() => {
     const savedApiKey = localStorage.getItem('deepseek-api-key');
@@ -50,7 +52,26 @@ const MultiClientChat = () => {
       setApiKey(savedApiKey);
     }
     loadClients();
+    loadTestCases();
   }, []);
+
+  const loadTestCases = async () => {
+    try {
+      const { data: testCasesData, error } = await supabase
+        .from('test_cases')
+        .select('*');
+
+      if (error) throw error;
+
+      if (testCasesData) {
+        setAllTestCases(testCasesData);
+        const uniqueCategories = [...new Set(testCasesData.map(tc => tc.category))];
+        setCategories(uniqueCategories);
+      }
+    } catch (error) {
+      console.error('加载测试用例失败:', error);
+    }
+  };
 
   const loadClients = async () => {
     try {
@@ -140,6 +161,78 @@ const MultiClientChat = () => {
       toast({
         title: "删除失败",
         description: "无法删除AI客户",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleSaveClient = async (clientData: Omit<AIClient, 'id' | 'isActive'>) => {
+    try {
+      if (editingClient) {
+        // Update existing client
+        const { error } = await supabase
+          .from('ai_clients')
+          .update({
+            name: clientData.name,
+            category: clientData.category,
+            prompt: clientData.prompt,
+            max_messages: clientData.max_messages,
+            use_random_generation: clientData.use_random_generation
+          })
+          .eq('id', editingClient.id);
+
+        if (error) throw error;
+        
+        toast({
+          title: "更新成功",
+          description: "AI客户已更新"
+        });
+      } else {
+        // Create new client
+        const { data: newClient, error } = await supabase
+          .from('ai_clients')
+          .insert({
+            name: clientData.name,
+            category: clientData.category,
+            prompt: clientData.prompt,
+            max_messages: clientData.max_messages,
+            use_random_generation: clientData.use_random_generation
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // Link test cases to the new client
+        if (clientData.testCases && clientData.testCases.length > 0) {
+          const testCaseLinks = clientData.testCases.map(testCase => ({
+            ai_client_id: newClient.id,
+            test_case_id: testCase.id
+          }));
+
+          const { error: linkError } = await supabase
+            .from('ai_client_test_cases')
+            .insert(testCaseLinks);
+
+          if (linkError) {
+            console.error('链接测试用例失败:', linkError);
+          }
+        }
+        
+        toast({
+          title: "创建成功",
+          description: "AI客户已创建"
+        });
+      }
+
+      setIsConfigModalOpen(false);
+      setEditingClient(null);
+      loadClients();
+    } catch (error) {
+      console.error('保存客户失败:', error);
+      toast({
+        title: "保存失败",
+        description: "无法保存AI客户",
         variant: "destructive"
       });
     }
@@ -352,8 +445,10 @@ const MultiClientChat = () => {
       <ClientConfigModal
         isOpen={isConfigModalOpen}
         onClose={() => setIsConfigModalOpen(false)}
-        client={editingClient}
-        onSave={loadClients}
+        editingClient={editingClient}
+        onSave={handleSaveClient}
+        categories={categories}
+        testCases={allTestCases}
       />
 
       <GlobalAttackHeatmapModal
