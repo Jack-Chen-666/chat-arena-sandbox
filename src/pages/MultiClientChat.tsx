@@ -9,7 +9,7 @@ import ClientChatRoom from '@/components/ClientChatRoom';
 import ClientConfigModal from '@/components/ClientConfigModal';
 import GlobalAttackHeatmapModal from '@/components/GlobalAttackHeatmapModal';
 import ExcelUploader from '@/components/ExcelUploader';
-import GlobalLimitNotification from '@/components/GlobalLimitNotification';
+
 
 interface TestCase {
   id: string;
@@ -42,7 +42,7 @@ const MultiClientChat = () => {
   const [isGlobalAutoMode, setIsGlobalAutoMode] = useState(false);
   const [messageStats, setMessageStats] = useState<{[key: string]: number}>({});
   const [apiKey, setApiKey] = useState('');
-  const [showGlobalLimitNotification, setShowGlobalLimitNotification] = useState(false);
+  
   const [categories, setCategories] = useState<string[]>([]);
   const [allTestCases, setAllTestCases] = useState<TestCase[]>([]);
 
@@ -253,6 +253,21 @@ const MultiClientChat = () => {
       });
       return;
     }
+    
+    // 检查是否所有客户都已达到上限
+    const allAtLimit = clients.every(client => {
+      const currentCount = messageStats[client.id] || 0;
+      return currentCount >= client.max_messages;
+    });
+    
+    if (allAtLimit && clients.length > 0) {
+      toast({
+        title: "全部测试已完成",
+        description: "所有AI客户均已达到消息上限，无需再次执行",
+      });
+      return;
+    }
+    
     setIsGlobalAutoMode(true);
     // 激活所有客户
     setClients(clients.map(client => ({ ...client, isActive: true })));
@@ -272,17 +287,32 @@ const MultiClientChat = () => {
     setMessageStats(prev => ({ ...prev, [clientId]: count }));
     
     const client = clients.find(c => c.id === clientId);
-    if (client && count >= client.max_messages && isGlobalAutoMode) {
-      // 检查是否所有客户都达到上限
-      const allAtLimit = clients.every(c => {
-        const currentCount = c.id === clientId ? count : (messageStats[c.id] || 0);
-        return currentCount >= c.max_messages;
+    if (client && count >= client.max_messages) {
+      // 显示个人客户达到上限的toast通知
+      toast({
+        title: `${client.name} 测试完成`,
+        description: "已达到消息发送上限",
       });
       
-      if (allAtLimit) {
-        setTimeout(() => {
-          setShowGlobalLimitNotification(true);
-        }, 1000);
+      if (isGlobalAutoMode) {
+        // 检查是否所有客户都达到上限
+        const allAtLimit = clients.every(c => {
+          const currentCount = c.id === clientId ? count : (messageStats[c.id] || 0);
+          return currentCount >= c.max_messages;
+        });
+        
+        if (allAtLimit) {
+          // 停止全局自动模式
+          setIsGlobalAutoMode(false);
+          setClients(clients.map(client => ({ ...client, isActive: false })));
+          
+          setTimeout(() => {
+            toast({
+              title: "全部测试完成",
+              description: "所有AI客户均已达到消息上限，全局自动模式已停止",
+            });
+          }, 500);
+        }
       }
     }
   };
@@ -474,10 +504,6 @@ const MultiClientChat = () => {
         }))}
       />
 
-      <GlobalLimitNotification
-        isVisible={showGlobalLimitNotification}
-        onClose={() => setShowGlobalLimitNotification(false)}
-      />
     </div>
   );
 };
