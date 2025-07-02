@@ -228,7 +228,18 @@ const MultiClientChat = () => {
 
       setIsConfigModalOpen(false);
       setEditingClient(null);
-      loadClients();
+      
+      // 如果是编辑现有客户，直接更新本地状态
+      if (editingClient) {
+        setClients(clients.map(client => 
+          client.id === editingClient.id 
+            ? { ...client, ...clientData }
+            : client
+        ));
+      } else {
+        // 如果是新建客户，重新加载数据
+        loadClients();
+      }
     } catch (error) {
       console.error('保存客户失败:', error);
       toast({

@@ -156,10 +156,10 @@ const TestCaseSelector: React.FC<TestCaseSelectorProps> = ({
                   <SelectTrigger className="bg-white/10 border-white/20 text-white">
                     <SelectValue placeholder="请选择测试类别" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-white/20">
-                    <SelectItem value="all" className="text-white">所有类别</SelectItem>
+                  <SelectContent className="bg-slate-800 border-white/20 text-white">
+                    <SelectItem value="all" className="text-white hover:bg-slate-700 focus:bg-slate-700">所有类别</SelectItem>
                     {categories.map((category) => (
-                      <SelectItem key={category} value={category} className="text-white">
+                      <SelectItem key={category} value={category} className="text-white hover:bg-slate-700 focus:bg-slate-700">
                         {category}
                       </SelectItem>
                     ))}
@@ -179,9 +179,9 @@ const TestCaseSelector: React.FC<TestCaseSelectorProps> = ({
                   <SelectTrigger className="bg-white/10 border-white/20 text-white">
                     <SelectValue placeholder="请选择具体测试用例" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-white/20">
+                  <SelectContent className="bg-slate-800 border-white/20 text-white">
                     {filteredTestCases.map((testCase) => (
-                      <SelectItem key={testCase.id} value={testCase.id} className="text-white">
+                      <SelectItem key={testCase.id} value={testCase.id} className="text-white hover:bg-slate-700 focus:bg-slate-700">
                         <div className="flex flex-col">
                           <span className="font-medium">{testCase.attack_type}</span>
                           <span className="text-xs text-gray-300 truncate max-w-60">
