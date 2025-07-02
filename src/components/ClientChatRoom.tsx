@@ -8,7 +8,7 @@ import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { DEFAULT_SYSTEM_PROMPT } from './SystemPromptEditor';
 import { useNavigate } from 'react-router-dom';
-import CoolNotification from './CoolNotification';
+
 import AttackHeatmapModal from './AttackHeatmapModal';
 
 interface Message {
@@ -67,9 +67,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
   const [systemPrompt] = useState(() => 
     localStorage.getItem('system-prompt') || DEFAULT_SYSTEM_PROMPT
   );
-  const [showLimitNotification, setShowLimitNotification] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
-  const [wasAutoCompleted, setWasAutoCompleted] = useState(false);
 
   // 使用useRef来持有最新的状态，避免在闭包中获取到陈旧的状态
   const stateRef = useRef({
@@ -132,16 +130,6 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     return () => clearTimeout(timer);
   }, [customerMessageCount, client.id, onMessageCountChange]);
 
-  // 监听消息计数变化，当达到上限时显示通知（仅限自动完成时）
-  useEffect(() => {
-    if (customerMessageCount >= client.max_messages && customerMessageCount > 0 && wasAutoCompleted && !isGlobalAutoMode) {
-      // 只有在自动完成且非全局自动模式下才显示个人通知
-      setTimeout(() => {
-        setShowLimitNotification(true);
-        setWasAutoCompleted(false); // 重置标记
-      }, 1000);
-    }
-  }, [customerMessageCount, client.max_messages, isGlobalAutoMode, wasAutoCompleted]);
 
   const addMessage = (content: string, sender: 'customer' | 'service') => {
     const newMessage: Message = {
@@ -362,7 +350,6 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
 
       if (currentState.customerMessageCount >= currentState.client.max_messages) {
         console.log(`${currentState.client.name} 达到消息限制，从循环中停止`);
-        setWasAutoCompleted(true); // 标记为自动完成
         stopAutoMode(); // 会清除定时器
         return;
       }
@@ -411,8 +398,6 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
     setCustomerMessageCount(0);
     setUsedTestCases(new Set());
     setIsSending(false);
-    setWasAutoCompleted(false);
-    setShowLimitNotification(false);
     stopAutoMode();
     console.log(`${client.name} 清空消息，重置计数`);
   };
@@ -615,15 +600,6 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
           </div>
         </CardContent>
       </Card>
-
-      {/* 炫酷通知 - 只在非全局自动模式下显示 */}
-      {!isGlobalAutoMode && (
-        <CoolNotification
-          isVisible={showLimitNotification}
-          clientName={client.name}
-          onClose={() => setShowLimitNotification(false)}
-        />
-      )}
 
       {/* 攻击热力图模态框 */}
       <AttackHeatmapModal
