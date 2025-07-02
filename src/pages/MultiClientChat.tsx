@@ -42,6 +42,7 @@ const MultiClientChat = () => {
   const [isGlobalAutoMode, setIsGlobalAutoMode] = useState(false);
   const [messageStats, setMessageStats] = useState<{[key: string]: number}>({});
   const [apiKey, setApiKey] = useState('');
+  const [completedClients, setCompletedClients] = useState<Set<string>>(new Set());
   
   const [categories, setCategories] = useState<string[]>([]);
   const [allTestCases, setAllTestCases] = useState<TestCase[]>([]);
@@ -281,13 +282,17 @@ const MultiClientChat = () => {
   const handleClearAllMessages = () => {
     window.dispatchEvent(new CustomEvent('clearAllClientMessages'));
     setMessageStats({});
+    setCompletedClients(new Set());
   };
 
   const handleMessageCountChange = (clientId: string, count: number) => {
     setMessageStats(prev => ({ ...prev, [clientId]: count }));
     
     const client = clients.find(c => c.id === clientId);
-    if (client && count >= client.max_messages) {
+    if (client && count >= client.max_messages && !completedClients.has(clientId)) {
+      // 标记此客户已完成，避免重复通知
+      setCompletedClients(prev => new Set([...prev, clientId]));
+      
       // 显示个人客户达到上限的toast通知
       toast({
         title: `${client.name} 测试完成`,
