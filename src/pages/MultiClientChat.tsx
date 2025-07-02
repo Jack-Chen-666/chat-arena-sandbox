@@ -464,7 +464,14 @@ const MultiClientChat = () => {
       <GlobalAttackHeatmapModal
         isOpen={showGlobalHeatmap}
         onClose={() => setShowGlobalHeatmap(false)}
-        clients={clients}
+        clients={clients.map(client => ({
+          id: client.id,
+          name: client.name,
+          category: client.category,
+          messageCount: messageStats[client.id] || 0,
+          maxMessages: client.max_messages,
+          isActive: client.isActive
+        }))}
       />
 
       <GlobalLimitNotification
