@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Settings, Play, Pause, RotateCcw, ArrowLeft } from 'lucide-react';
+import { Plus, Settings, Play, Pause, RotateCcw, ArrowLeft, TrendingUp } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
@@ -9,6 +9,7 @@ import ClientChatRoom from '@/components/ClientChatRoom';
 import ClientConfigModal from '@/components/ClientConfigModal';
 import ExcelUploader from '@/components/ExcelUploader';
 import GlobalLimitNotification from '@/components/GlobalLimitNotification';
+import GlobalAttackHeatmapModal from '@/components/GlobalAttackHeatmapModal';
 
 interface TestCase {
   id: string;
@@ -41,6 +42,7 @@ const MultiClientChat = () => {
   const [apiKey] = useState(() => localStorage.getItem('deepseek-api-key') || '');
   const [isLoading, setIsLoading] = useState(true);
   const [showGlobalLimitNotification, setShowGlobalLimitNotification] = useState(false);
+  const [showGlobalHeatmap, setShowGlobalHeatmap] = useState(false);
 
   useEffect(() => {
     const initializeData = async () => {
@@ -411,6 +413,18 @@ const MultiClientChat = () => {
     return messageCount >= client.max_messages;
   });
 
+  // 准备全局热力图数据
+  const prepareGlobalHeatmapData = () => {
+    return clients.map(client => ({
+      id: client.id,
+      name: client.name,
+      category: client.category,
+      messageCount: clientMessageCounts[client.id] || 0,
+      maxMessages: client.max_messages,
+      isActive: client.isActive
+    }));
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <div className="w-full h-screen flex flex-col">
@@ -431,6 +445,16 @@ const MultiClientChat = () => {
             </div>
             
             <div className="flex items-center space-x-2">
+              <Button
+                onClick={() => setShowGlobalHeatmap(true)}
+                variant="outline"
+                size="sm"
+                className="bg-red-600/20 border-red-500/30 text-red-300 hover:bg-red-600/30"
+              >
+                <TrendingUp className="h-4 w-4 mr-2" />
+                全局攻击热力图
+              </Button>
+              
               <Button
                 onClick={() => setShowExcelUploader(true)}
                 variant="outline"
@@ -605,6 +629,13 @@ const MultiClientChat = () => {
         <GlobalLimitNotification
           isVisible={showGlobalLimitNotification}
           onClose={() => setShowGlobalLimitNotification(false)}
+        />
+
+        {/* 全局攻击热力图模态框 */}
+        <GlobalAttackHeatmapModal
+          isOpen={showGlobalHeatmap}
+          onClose={() => setShowGlobalHeatmap(false)}
+          clients={prepareGlobalHeatmapData()}
         />
       </div>
     </div>

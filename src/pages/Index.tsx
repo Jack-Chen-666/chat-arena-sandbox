@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +9,7 @@ import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
 import AttackHeatmapModal from '@/components/AttackHeatmapModal';
+import TestCaseSelector from '@/components/TestCaseSelector';
 
 interface Message {
   id: string;
@@ -35,6 +35,7 @@ const Index = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<Conversation[]>([]);
   const [showHeatmap, setShowHeatmap] = useState(false);
+  const [showTestCaseSelector, setShowTestCaseSelector] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -181,6 +182,11 @@ const Index = () => {
     return new Date(dateString).toLocaleString('zh-CN');
   };
 
+  const handleSelectTestCase = (testPrompt: string) => {
+    setCurrentMessage(testPrompt);
+    setShowTestCaseSelector(false);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <div className="w-full h-screen flex flex-col">
@@ -260,6 +266,13 @@ const Index = () => {
         <div className="flex-1 flex gap-4 p-4 min-h-0 max-w-full">
           {/* 左侧聊天区域 - 扩大宽度 */}
           <div className="flex-1 flex flex-col min-w-0">
+            {/* 测试用例选择器 */}
+            <TestCaseSelector
+              onSelectTestCase={handleSelectTestCase}
+              isVisible={showTestCaseSelector}
+              onToggleVisibility={() => setShowTestCaseSelector(!showTestCaseSelector)}
+            />
+
             <Card className="flex-1 bg-white/10 backdrop-blur-md border-white/20 flex flex-col">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
