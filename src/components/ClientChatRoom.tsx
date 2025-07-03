@@ -92,8 +92,7 @@ const ClientChatRoom: React.FC<ClientChatRoomProps> = ({
   });
 
   const scrollToBottom = () => {
-    // 不再自动滚动
-    // messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
